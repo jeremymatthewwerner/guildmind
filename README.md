@@ -1,18 +1,159 @@
-# Guildmind
+<p align="center">
+  <img src="assets/guildmind-logo.svg" alt="Guildmind logo: three agents connected through a shared spark inside a guild crest" width="220">
+</p>
 
-Guildmind is a research project about improving collective AI capability by evolving how agents organize, collaborate, evaluate one another, and preserve knowledge.
+<h1 align="center">Guildmind</h1>
+
+<p align="center"><strong>Evolving institutions for artificial collective intelligence.</strong></p>
+
+Guildmind is a research project about improving collective AI capability by evolving how agents organize, collaborate, evaluate one another, and preserve knowledge—not by changing the underlying model weights.
 
 The project starts from a simple question:
 
 > Can changing the institution around otherwise fixed agents produce reliable capability gains that generalize beyond the tasks used to discover it?
 
-This repository will develop the experimental system needed to answer that question. The initial domain is software engineering because outcomes can be tested automatically and experiments can be replayed.
+The idea is inspired by a feature of human intelligence: civilization advanced much faster than human biology. Language, specialization, education, peer review, standards, reputation, and governance allowed groups of broadly similar individuals to become much more capable collectively. Guildmind asks whether some of that leverage transfers to societies of AI agents.
 
-Project documents:
+This is a hypothesis to test, not a premise the project assumes.
 
-- [Starting brief](docs/starting-brief.md): thesis, first experiment, evaluation strategy, and research principles.
-- [Staged build plan](docs/build-plan.md): architecture, stage gates, experiment design, implementation roadmap, and first-month backlog.
+## Core hypothesis
+
+The initial claim is deliberately narrow:
+
+> A machine-readable institution discovered on development tasks can outperform strong solo and multi-agent workflows on unseen software-engineering tasks, using the same model, tools, and aggregate resource budget.
+
+An **institution** is more than a collection of role prompts. It includes persistent rules governing how work is delegated, reviewed, accepted, disputed, escalated, remembered, and rewarded. A planner–implementer–reviewer topology is an organization; requiring independent review before acceptance, with a bounded appeal process, is institutional.
+
+Guildmind treats several questions as separate hypotheses:
+
+- Can an institution improve capability at a fixed budget?
+- Can search discover useful institutions more efficiently than random or manual design?
+- Can reputation, certification, apprenticeship, or institutional memory improve future performance?
+- Can independent judge societies predict human preferences without drifting alongside workers?
+- Do successful institutional rules transfer to new repositories, languages, or domains?
+
+## What we are building
+
+The project will provide a reproducible research platform with:
+
+- a declarative **organizational genome** describing roles, communication, governance, memory, and budgets;
+- an event-driven runtime that interprets genomes without hiding orchestration behavior inside an agent framework;
+- isolated worker environments and a separate hidden-test evaluator;
+- an authoritative budget ledger covering model calls, token classes, tool use, time, and estimated cost;
+- complete candidate lineage, event traces, patches, failures, and replayable evidence;
+- noise-aware search over valid institutional mutations; and
+- later, independently calibrated judge societies and persistent institutional state.
+
+The first implementation domain is software engineering. Coding tasks provide objective tests, isolated execution, fast iteration, and a strong basis for distinguishing actual improvement from persuasive-looking output.
+
+## First research program
+
+The first experiment compares a searched institution against four frozen, equal-budget baselines:
+
+1. A solo agent.
+2. A solo agent with an explicit reflection loop.
+3. Equal-budget best-of-N attempts with a selector.
+4. A hand-designed planner → implementer → reviewer team.
+
+Every system receives the same underlying model snapshot, tools, task information, and aggregate cap. More agents do not receive more total inference merely because they can spend it in parallel.
+
+Search occurs only on generated development tasks. One frozen champion is then evaluated in a sealed campaign of fresh, repository-disjoint tasks created after the selected model snapshot. Public benchmarks remain useful for compatibility, but the central claim cannot rest on a benchmark that may already be contaminated or heavily optimized against.
+
+A positive result requires the champion to clear a preregistered improvement threshold against every required baseline. A development-only gain, a gain caused by additional inference, or a result dependent on evaluator leakage is negative or invalid—not success.
+
+## Roadmap
+
+The work is divided into gated stages:
+
+1. **Experiment contract:** freeze hypotheses, eligibility rules, resource ceilings, analysis, and the leakage threat model.
+2. **Measurement substrate:** build a deterministic runner, sandbox, evaluator, budget ledger, trace, and replay system.
+3. **Strong baselines:** measure cost, variance, task difficulty, and infrastructure reliability.
+4. **Institution language:** compile validated genomes into bounded executable state machines.
+5. **Search machinery:** add typed mutations, lineage, archives, and multi-fidelity promotion.
+6. **Exploratory search and sealed confirmation:** select one candidate and obtain a positive, equivocal, negative, or invalid result.
+7. **Persistent institutions:** test reputation, certification, apprenticeship, and durable memory.
+8. **Judge societies:** calibrate independent evaluators against blinded human preferences.
+9. **Transfer:** freeze successful institutions and test them on new distributions and domains.
+
+PettingZoo is being considered as an optional environment adapter for inexpensive multi-agent testbeds and later transfer experiments. It will not define Guildmind's core scheduler or the coding-task lifecycle.
+
+## Research principles
+
+- **Evidence before scale.** Complexity must be earned by measured gains.
+- **Institutions are executable.** Social metaphors become precise, versioned rules with observable effects.
+- **Budgets are part of correctness.** Quality claims are meaningless without equal resource accounting.
+- **Evaluation stays independent.** Workers cannot alter or inspect the standards by which they are selected.
+- **Search and confirmation stay separate.** Development feedback never becomes confirmatory evidence.
+- **Negative results are artifacts.** Failed institutions and discarded candidates remain part of the record.
+- **Transfer is the real test.** Improvement on search tasks is discovery; improvement on unseen distributions is evidence.
 
 ## Current status
 
-Pre-implementation research design. The next deliverable is a minimal experiment specification and runnable evaluation harness.
+Guildmind now has its first deterministic local vertical slice. It can:
+
+- validate and export versioned task, experiment, run, event, budget, artifact, and evaluation schemas;
+- reserve aggregate budget before model work and reconcile reported usage afterward;
+- store immutable artifacts by content hash and hash-link events in a single-writer SQLite ledger;
+- run a scripted fake model against a repository-owned coding fixture;
+- validate and apply a constrained patch to a copied workspace;
+- execute visible and out-of-workspace hidden tests in a separate fresh copy; and
+- verify the event chain, reconstruct terminal state, and compare normalized semantic digests across runs.
+
+The implemented path is:
+
+```text
+fixture task → fake model → validated patch → copied workspace
+             → fresh local evaluator → artifacts + event ledger → replay
+```
+
+This is engineering infrastructure for trusted repository-owned fixtures, not yet a hostile-code sandbox. External tasks and real model-generated commands remain blocked until the rootless Linux container boundary, network isolation, cgroup enforcement, evaluator containment, and adversarial tests pass. The Experiment 0001 contract also remains a draft until its model, spend ceilings, minimum relevant effect, and publication level are approved.
+
+## Quick start
+
+Guildmind currently targets Python 3.12 and uses [uv](https://docs.astral.sh/uv/) for its locked environment.
+
+```bash
+uv sync
+make check
+uv run guildmind doctor
+```
+
+Run and replay the deterministic fixture:
+
+```bash
+uv run guildmind run fixtures/001-python-addition \
+  --state-dir .guildmind \
+  --run-id demo-run
+
+uv run guildmind replay demo-run --state-dir .guildmind
+uv run guildmind report demo-run --state-dir .guildmind
+```
+
+Export the public JSON Schemas or run the 100-repetition semantic determinism check:
+
+```bash
+make schemas
+make determinism
+```
+
+`guildmind doctor` reports the trusted local fixture path separately from production-sandbox readiness. Generated run artifacts remain outside Git by default.
+
+## Project documents
+
+- [Starting brief](docs/starting-brief.md): the thesis, first experiment, evaluation strategy, risks, and research principles.
+- [Staged build plan](docs/build-plan.md): the architecture, benchmark ladder, statistical design, stage gates, implementation roadmap, costs, and first-month backlog.
+- [Experiment 0001 contract](docs/experiments/0001-institutional-search.md): the pilot protocol, claims, task partitions, budget semantics, lockbox rules, and open owner decisions.
+- [Threat model](docs/threat-model.md): assets, trust boundaries, threats, controls, and release gates.
+- [Architecture decisions](docs/decisions/): the Python environment, evidence storage, and sandbox/evaluator boundary.
+- [Plan review ledger](docs/reviews/2026-07-31-plan-audit.md): durable dispositions for the benchmark, runtime, and search/evaluation review findings.
+
+## Initial non-goals
+
+- Training or fine-tuning foundation-model weights.
+- Building an open-ended autonomous civilization.
+- Treating prompt search alone as institutional improvement.
+- Allowing worker and judge populations to co-evolve against an unvalidated score.
+- Replacing objective tests with model judgment.
+- Optimizing a public leaderboard without cost, leakage, and transfer controls.
+
+The long-term ambition is an artificial collective capable of improving how intelligence is organized, evaluated, and transmitted. The immediate obligation is much smaller: run one clean experiment that could prove the idea wrong.

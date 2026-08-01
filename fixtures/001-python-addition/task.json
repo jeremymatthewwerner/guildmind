@@ -1,0 +1,19 @@
+{
+  "schema_version": "guildmind.fixture/v1",
+  "task_id": "fixture-001-python-addition",
+  "problem_statement": "Fix add() so it returns the arithmetic sum of its two integer arguments.",
+  "workspace_dir": "workspace",
+  "visible_test_files": [
+    "workspace/test_visible.py"
+  ],
+  "hidden_test_files": [
+    "grader/test_hidden.py"
+  ],
+  "network_required": false,
+  "allowed_patch_paths": [
+    "addition.py"
+  ],
+  "timeout_seconds": 5,
+  "max_output_bytes": 8192,
+  "max_patch_bytes": 65536
+}

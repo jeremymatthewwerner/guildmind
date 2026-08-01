@@ -1,0 +1,86 @@
+{
+  "additionalProperties": false,
+  "description": "Normalized cumulative usage for one run.\n\nThe three input-token fields are disjoint. ``reasoning_tokens`` is a diagnostic\nsubset of ``output_tokens`` and is therefore not counted a second time.",
+  "properties": {
+    "cache_read_input_tokens": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Cache Read Input Tokens",
+      "type": "integer"
+    },
+    "cache_write_input_tokens": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Cache Write Input Tokens",
+      "type": "integer"
+    },
+    "container_wall_seconds": {
+      "default": 0.0,
+      "minimum": 0,
+      "title": "Container Wall Seconds",
+      "type": "number"
+    },
+    "elapsed_seconds": {
+      "default": 0.0,
+      "minimum": 0,
+      "title": "Elapsed Seconds",
+      "type": "number"
+    },
+    "estimated_cost_usd": {
+      "default": 0.0,
+      "minimum": 0,
+      "title": "Estimated Cost Usd",
+      "type": "number"
+    },
+    "model_calls": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Model Calls",
+      "type": "integer"
+    },
+    "model_retries": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Model Retries",
+      "type": "integer"
+    },
+    "output_tokens": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Output Tokens",
+      "type": "integer"
+    },
+    "reasoning_tokens": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Reasoning Tokens",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "0.1",
+      "default": "0.1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "tool_calls": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Tool Calls",
+      "type": "integer"
+    },
+    "tool_cpu_seconds": {
+      "default": 0.0,
+      "minimum": 0,
+      "title": "Tool Cpu Seconds",
+      "type": "number"
+    },
+    "uncached_input_tokens": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Uncached Input Tokens",
+      "type": "integer"
+    }
+  },
+  "title": "BudgetUsage",
+  "type": "object"
+}

@@ -1,0 +1,235 @@
+{
+  "$defs": {
+    "BudgetLimits": {
+      "additionalProperties": false,
+      "description": "Aggregate hard caps for one run; ``None`` means that dimension is uncapped.",
+      "properties": {
+        "max_container_wall_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Container Wall Seconds"
+        },
+        "max_elapsed_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Elapsed Seconds"
+        },
+        "max_estimated_cost_usd": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Estimated Cost Usd"
+        },
+        "max_input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Input Tokens"
+        },
+        "max_model_calls": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Model Calls"
+        },
+        "max_model_retries": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Model Retries"
+        },
+        "max_output_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Output Tokens"
+        },
+        "max_tool_calls": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Tool Calls"
+        },
+        "max_tool_cpu_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Tool Cpu Seconds"
+        },
+        "max_total_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Total Tokens"
+        },
+        "schema_version": {
+          "const": "0.1",
+          "default": "0.1",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "title": "BudgetLimits",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Frozen hypothesis and equal-budget comparison contract.",
+  "properties": {
+    "budget_limits": {
+      "$ref": "#/$defs/BudgetLimits"
+    },
+    "candidate_ids": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Candidate Ids",
+      "type": "array"
+    },
+    "experiment_id": {
+      "minLength": 1,
+      "title": "Experiment Id",
+      "type": "string"
+    },
+    "hypothesis": {
+      "minLength": 1,
+      "title": "Hypothesis",
+      "type": "string"
+    },
+    "metrics": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Metrics",
+      "type": "array"
+    },
+    "repeats": {
+      "default": 1,
+      "exclusiveMinimum": 0,
+      "title": "Repeats",
+      "type": "integer"
+    },
+    "retry_limit": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Retry Limit",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "0.1",
+      "default": "0.1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "seed": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Seed",
+      "type": "integer"
+    },
+    "stopping_rule": {
+      "minLength": 1,
+      "title": "Stopping Rule",
+      "type": "string"
+    },
+    "task_ids": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Task Ids",
+      "type": "array"
+    },
+    "task_split": {
+      "minLength": 1,
+      "title": "Task Split",
+      "type": "string"
+    }
+  },
+  "required": [
+    "experiment_id",
+    "hypothesis",
+    "candidate_ids",
+    "task_ids",
+    "task_split",
+    "budget_limits",
+    "metrics",
+    "stopping_rule"
+  ],
+  "title": "ExperimentSpec",
+  "type": "object"
+}

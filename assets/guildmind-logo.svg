@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">Guildmind</title>
+  <desc id="description">Three connected agents converging on a shared spark inside a guild crest.</desc>
+
+  <path
+    d="M256 42C310 85 371 109 434 119V247C434 349 365 427 256 470C147 427 78 349 78 247V119C141 109 202 85 256 42Z"
+    fill="#0B1F3A"
+    stroke="#22D3EE"
+    stroke-width="18"
+    stroke-linejoin="round"
+  />
+
+  <g fill="none" stroke="#F6C453" stroke-width="16" stroke-linecap="round">
+    <path d="M164 170L256 252" />
+    <path d="M348 170L256 252" />
+    <path d="M256 352L256 252" />
+  </g>
+
+  <g fill="#F6C453">
+    <circle cx="164" cy="170" r="31" />
+    <circle cx="348" cy="170" r="31" />
+    <circle cx="256" cy="352" r="31" />
+  </g>
+
+  <path
+    d="M256 202C264 229 278 244 306 252C278 260 264 275 256 302C248 275 234 260 206 252C234 244 248 229 256 202Z"
+    fill="#F6C453"
+  />
+</svg>

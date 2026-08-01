@@ -1,0 +1,13 @@
+.DS_Store
+.coverage
+.guildmind/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.venv/
+__pycache__/
+*.db
+*.py[cod]
+htmlcov/
+reports/generated/
+runs/

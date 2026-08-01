@@ -1,0 +1,124 @@
+{
+  "$defs": {
+    "ArtifactRef": {
+      "additionalProperties": false,
+      "description": "Reference to immutable bytes in a content-addressed artifact store.",
+      "properties": {
+        "media_type": {
+          "minLength": 1,
+          "title": "Media Type",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "0.1",
+          "default": "0.1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "title": "Size Bytes",
+          "type": "integer"
+        },
+        "storage_ref": {
+          "minLength": 1,
+          "title": "Storage Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "media_type",
+        "size_bytes",
+        "sha256",
+        "storage_ref"
+      ],
+      "title": "ArtifactRef",
+      "type": "object"
+    },
+    "JsonValue": {}
+  },
+  "additionalProperties": false,
+  "description": "Immutable benchmark task and the exact worker-visible inputs.",
+  "properties": {
+    "image_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Image Digest",
+      "type": "string"
+    },
+    "metadata": {
+      "additionalProperties": {
+        "$ref": "#/$defs/JsonValue"
+      },
+      "title": "Metadata",
+      "type": "object"
+    },
+    "problem_statement": {
+      "$ref": "#/$defs/ArtifactRef"
+    },
+    "repository": {
+      "minLength": 1,
+      "title": "Repository",
+      "type": "string"
+    },
+    "repository_commit": {
+      "minLength": 1,
+      "title": "Repository Commit",
+      "type": "string"
+    },
+    "repository_snapshot": {
+      "$ref": "#/$defs/ArtifactRef"
+    },
+    "schema_version": {
+      "const": "0.1",
+      "default": "0.1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source": {
+      "minLength": 1,
+      "title": "Source",
+      "type": "string"
+    },
+    "split": {
+      "minLength": 1,
+      "title": "Split",
+      "type": "string"
+    },
+    "task_content_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Task Content Hash",
+      "type": "string"
+    },
+    "task_id": {
+      "minLength": 1,
+      "title": "Task Id",
+      "type": "string"
+    },
+    "visible_tests": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ArtifactRef"
+      },
+      "title": "Visible Tests",
+      "type": "array"
+    }
+  },
+  "required": [
+    "task_id",
+    "source",
+    "split",
+    "repository",
+    "repository_commit",
+    "image_digest",
+    "task_content_hash",
+    "problem_statement",
+    "repository_snapshot"
+  ],
+  "title": "TaskSpec",
+  "type": "object"
+}
