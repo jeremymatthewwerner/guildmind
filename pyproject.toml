@@ -29,6 +29,10 @@ packages = ["src/guildmind"]
 [tool.pytest.ini_options]
 addopts = "-ra --strict-config --strict-markers"
 testpaths = ["tests"]
+markers = [
+  "container: requires an explicitly configured local Docker evaluator image",
+  "reference_sandbox: requires the controlled rootless x86_64 Linux reference host",
+]
 
 [tool.coverage.run]
 branch = true

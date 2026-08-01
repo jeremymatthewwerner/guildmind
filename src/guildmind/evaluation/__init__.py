@@ -1,5 +1,7 @@
 """Evaluation adapters and result types."""
 
+from guildmind.evaluation.base import Evaluator
+from guildmind.evaluation.container import ContainerEvaluator, ContainerEvaluatorResources
 from guildmind.evaluation.local import (
     EvaluationStatus,
     FixtureConfigurationError,
@@ -10,7 +12,10 @@ from guildmind.evaluation.local import (
 )
 
 __all__ = [
+    "ContainerEvaluator",
+    "ContainerEvaluatorResources",
     "EvaluationStatus",
+    "Evaluator",
     "FixtureConfigurationError",
     "LocalEvaluationResult",
     "LocalEvaluationSpec",

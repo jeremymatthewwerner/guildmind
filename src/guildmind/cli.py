@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import platform
 import re
 import shutil
@@ -19,6 +20,12 @@ from guildmind.evaluation import LocalEvaluator, load_fixture
 from guildmind.models import ScriptedPatchModel
 from guildmind.runtime.replay import replay_events, semantic_digest
 from guildmind.runtime.runner import FixtureRunner
+from guildmind.sandbox import (
+    DockerSandbox,
+    SandboxConfigurationError,
+    SandboxUnavailableError,
+    run_sandbox_self_test,
+)
 from guildmind.storage import EventStore
 
 
@@ -38,6 +45,16 @@ def _build_parser() -> argparse.ArgumentParser:
 
     doctor = subcommands.add_parser("doctor", help="inspect local execution prerequisites")
     doctor.add_argument("--json", action="store_true", dest="as_json")
+    doctor.add_argument(
+        "--production",
+        action="store_true",
+        help="fail unless the complete reference-host sandbox probe passes",
+    )
+    doctor.add_argument(
+        "--evaluator-image",
+        default=os.environ.get("GUILDMIND_REFERENCE_EVALUATOR_IMAGE"),
+        help="digest-pinned evaluator image already present on the Docker host",
+    )
     doctor.set_defaults(handler=_doctor)
 
     run = subcommands.add_parser("run", help="run the scripted deterministic fixture")
@@ -61,6 +78,14 @@ def _build_parser() -> argparse.ArgumentParser:
     replay.add_argument("--state-dir", type=Path, default=Path(".guildmind"))
     replay.set_defaults(handler=_replay)
 
+    recover = subcommands.add_parser(
+        "recover",
+        help="terminalize one interrupted run without redispatching work",
+    )
+    recover.add_argument("run_id")
+    recover.add_argument("--state-dir", type=Path, default=Path(".guildmind"))
+    recover.set_defaults(handler=_recover)
+
     report = subcommands.add_parser("report", help="print a stored run summary")
     report.add_argument("run_id")
     report.add_argument("--state-dir", type=Path, default=Path(".guildmind"))
@@ -81,41 +106,68 @@ def _doctor(arguments: argparse.Namespace) -> int:
     docker_path = shutil.which("docker")
     docker_server = False
     docker_diagnostic = "docker executable not found"
+    docker_reference_ready = False
+    docker_failures: tuple[str, ...] = ("docker_executable_not_found",)
+    docker_warnings: tuple[str, ...] = ()
+    evaluator_image_id: str | None = None
+    evaluator_image_diagnostic = "evaluator image is not configured"
+    self_test_passed = False
+    self_test_checks: dict[str, bool] = {}
+    self_test_diagnostic = "reference host or evaluator image is not ready"
     if docker_path is not None:
         try:
-            completed = subprocess.run(
-                [docker_path, "version", "--format", "{{.Server.Version}}"],
-                capture_output=True,
-                check=False,
-                text=True,
-                timeout=5,
-            )
-            docker_server = completed.returncode == 0 and bool(completed.stdout.strip())
-            docker_diagnostic = (
-                completed.stdout.strip() if docker_server else completed.stderr.strip()
-            )
-        except (OSError, subprocess.TimeoutExpired) as error:
+            sandbox = DockerSandbox(docker_executable=docker_path)
+            assessment = sandbox.assess_host()
+            docker_server = True
+            docker_reference_ready = assessment.reference_ready
+            docker_failures = assessment.failures
+            docker_warnings = assessment.warnings
+            docker_diagnostic = "Docker server responded"
+            if arguments.evaluator_image is not None:
+                try:
+                    evaluator_image_id = sandbox.verify_image(arguments.evaluator_image)
+                    evaluator_image_diagnostic = "digest-pinned evaluator image verified locally"
+                except (SandboxConfigurationError, SandboxUnavailableError) as error:
+                    evaluator_image_diagnostic = str(error)
+            if docker_reference_ready and evaluator_image_id is not None:
+                report = run_sandbox_self_test(sandbox, image=arguments.evaluator_image)
+                self_test_passed = report.passed
+                self_test_checks = report.checks
+                self_test_diagnostic = report.diagnostic or "all active controls passed"
+        except (SandboxConfigurationError, SandboxUnavailableError) as error:
             docker_diagnostic = str(error)
-    is_linux = sys.platform.startswith("linux")
-    cgroup_v2 = is_linux and Path("/sys/fs/cgroup/cgroup.controllers").is_file()
     local_ready = python_ok and git_path is not None
-    production_sandbox_ready = local_ready and docker_server and is_linux and cgroup_v2
+    production_sandbox_ready = (
+        local_ready
+        and docker_server
+        and docker_reference_ready
+        and evaluator_image_id is not None
+        and self_test_passed
+    )
     result = {
         "local_fixture_ready": local_ready,
         "production_sandbox_ready": production_sandbox_ready,
         "checks": {
-            "cgroup_v2": cgroup_v2 if is_linux else "not-applicable-on-this-host",
             "docker_server": docker_server,
             "docker_diagnostic": docker_diagnostic,
+            "docker_reference_failures": docker_failures,
+            "docker_reference_ready": docker_reference_ready,
+            "docker_reference_warnings": docker_warnings,
+            "evaluator_image_diagnostic": evaluator_image_diagnostic,
+            "evaluator_image_id": evaluator_image_id,
+            "evaluator_image_reference": arguments.evaluator_image,
             "git": git_path,
             "platform": platform.platform(),
             "python": platform.python_version(),
             "python_3_12": python_ok,
+            "sandbox_self_test": self_test_checks,
+            "sandbox_self_test_diagnostic": self_test_diagnostic,
+            "sandbox_self_test_passed": self_test_passed,
             "uv": uv_path,
         },
         "warning": (
-            "The local fixture adapter is trusted-code engineering infrastructure, "
-            "not the production Linux isolation boundary."
+            "Production readiness requires the rootless x86_64 Linux reference host, "
+            "a local digest-pinned image, and the active sandbox control probe."
         ),
     }
     if arguments.as_json:
@@ -124,7 +176,8 @@ def _doctor(arguments: argparse.Namespace) -> int:
         print(f"Local fixture ready: {local_ready}")
         print(f"Production sandbox ready: {production_sandbox_ready}")
         print(result["warning"])
-    return 0 if local_ready else 1
+    required_ready = production_sandbox_ready if arguments.production else local_ready
+    return 0 if required_ready else 1
 
 
 def _run(arguments: argparse.Namespace) -> int:
@@ -182,6 +235,24 @@ def _replay(arguments: argparse.Namespace) -> int:
             "run_id": state.run_id,
             "semantic_digest": semantic_digest(events),
             "status": state.status.value,
+        }
+    )
+    return 0
+
+
+def _recover(arguments: argparse.Namespace) -> int:
+    state_directory = arguments.state_dir.resolve()
+    manifest = FixtureRunner(state_directory=state_directory).recover(arguments.run_id)
+    with EventStore(state_directory / "runs.db") as store:
+        events = store.list_events(arguments.run_id)
+    state = replay_events(events, require_terminal=True)
+    _print_json(
+        {
+            "event_count": state.event_count,
+            "run_id": manifest.run_id,
+            "semantic_digest": semantic_digest(events),
+            "status": manifest.status.value,
+            "terminal_reason": manifest.terminal_reason,
         }
     )
     return 0

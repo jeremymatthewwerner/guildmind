@@ -99,14 +99,19 @@ Guildmind now has its first deterministic local vertical slice. It can:
 - execute visible and out-of-workspace hidden tests in a separate fresh copy; and
 - verify the event chain, reconstruct terminal state, and compare normalized semantic digests across runs.
 
+The current Stage 1 hardening checkpoint adds a restricted Docker invocation contract, a pinned image-owned container evaluator, and crash recovery that closes an abandoned nonterminal run with explicit terminal evidence. These are development controls and contract tests, not a claim that hostile-code containment has passed.
+
 The implemented path is:
 
 ```text
 fixture task → fake model → validated patch → copied workspace
-             → fresh local evaluator → artifacts + event ledger → replay
+             → local or restricted development evaluator
+             → artifacts + transactional event ledger → replay/recovery
 ```
 
-This is engineering infrastructure for trusted repository-owned fixtures, not yet a hostile-code sandbox. External tasks and real model-generated commands remain blocked until the rootless Linux container boundary, network isolation, cgroup enforcement, evaluator containment, and adversarial tests pass. The Experiment 0001 contract also remains a draft until its model, spend ceilings, minimum relevant effect, and publication level are approved.
+This is engineering infrastructure for trusted repository-owned fixtures, not yet a hostile-code sandbox. The development evaluator image rebuilt reproducibly and completed the gold fixture under the declared restrictions on Docker Desktop, but that rootful ARM Linux virtual machine is not the required rootless x86_64 reference host. More importantly, the current Python harness imports candidate code into the same interpreter as `unittest`: the checked-in adversarial fixture can monkeypatch the runner and forge a pass. A strict expected-failure test preserves that known defect. External tasks and real model-generated commands remain blocked until the evaluator trust boundary is redesigned, the reference-host adversarial suite passes, and the 99% normal-fixture reliability campaign passes. The [Stage 1 hardening gate report](docs/reviews/2026-08-01-stage-1-hardening-gate.md) records the exact evidence and retains a **NOT PASSED** verdict.
+
+Experiment 0001 also remains a draft until its worker model, spend ceilings, minimum relevant effect, and publication level are approved. Until both that Stage 0 approval and the Stage 1 boundary gate exist, the next work remains fixture hardening—not provider-backed pilots, baselines, genomes, or search.
 
 ## Quick start
 
@@ -127,6 +132,9 @@ uv run guildmind run fixtures/001-python-addition \
 
 uv run guildmind replay demo-run --state-dir .guildmind
 uv run guildmind report demo-run --state-dir .guildmind
+
+# If a previous process died mid-run, close that attempt without redispatching it:
+uv run guildmind recover interrupted-run --state-dir .guildmind
 ```
 
 Export the public JSON Schemas or run the 100-repetition semantic determinism check:
@@ -136,7 +144,7 @@ make schemas
 make determinism
 ```
 
-`guildmind doctor` reports the trusted local fixture path separately from production-sandbox readiness. Generated run artifacts remain outside Git by default.
+`guildmind doctor` reports the trusted local fixture path separately from whether the configured Docker host/image passes the production sandbox probe. That probe is necessary but is not the Stage 1 gate: it does not certify evaluator discrimination, recovery campaigns, or fixture reliability. Generated run artifacts remain outside Git by default.
 
 ## Project documents
 
@@ -146,6 +154,7 @@ make determinism
 - [Threat model](docs/threat-model.md): assets, trust boundaries, threats, controls, and release gates.
 - [Architecture decisions](docs/decisions/): the Python environment, evidence storage, and sandbox/evaluator boundary.
 - [Plan review ledger](docs/reviews/2026-07-31-plan-audit.md): durable dispositions for the benchmark, runtime, and search/evaluation review findings.
+- [Stage 1 hardening gate](docs/reviews/2026-08-01-stage-1-hardening-gate.md): implemented development controls, smoke evidence, remaining adversarial matrix, reference-host procedure, and current verdict.
 
 ## Initial non-goals
 

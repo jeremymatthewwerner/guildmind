@@ -223,6 +223,8 @@ def test_evaluation_requires_terminal_run_and_verified_result() -> None:
         EvaluationResult.model_validate({**values, "run_status": RunStatus.RUNNING})
     with pytest.raises(ValidationError, match="does not match"):
         EvaluationResult.model_validate({**values, "result_sha256": HASH_A})
+    with pytest.raises(ValidationError, match="terminal run state"):
+        EvaluationResult.model_validate({**values, "outcome": "failed"})
     with pytest.raises(ValidationError, match="cannot have a patch hash"):
         EvaluationResult.model_validate({**values, "outcome": "not_run"})
 

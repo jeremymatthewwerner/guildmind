@@ -331,6 +331,18 @@ class EvaluationResult(DomainModel):
             raise ValueError("not_run evaluations cannot have a patch hash")
         if self.outcome != "not_run" and self.patch_hash is None:
             raise ValueError("completed evaluations require a patch hash")
+        compatible_statuses = {
+            "passed": {RunStatus.SUCCEEDED},
+            "failed": {RunStatus.FAILED, RunStatus.TIMED_OUT},
+            "error": {RunStatus.INFRASTRUCTURE_ERROR},
+            "not_run": {
+                RunStatus.CANCELLED,
+                RunStatus.BUDGET_EXHAUSTED,
+                RunStatus.INFRASTRUCTURE_ERROR,
+            },
+        }
+        if self.run_status not in compatible_statuses[self.outcome]:
+            raise ValueError("evaluation outcome does not match its terminal run state")
         if self.result_sha256 != canonical_sha256(self.result):
             raise ValueError("result_sha256 does not match the canonical result")
         return self

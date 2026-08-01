@@ -19,7 +19,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
@@ -27,7 +27,13 @@ from typing import BinaryIO, Literal, Self, cast
 
 from pydantic import JsonValue
 
-from guildmind.domain import EvaluationResult, RunStatus, TaskSpec, canonical_sha256
+from guildmind.domain import (
+    EvaluationResult,
+    RunStatus,
+    TaskSpec,
+    canonical_sha256,
+    sha256_bytes,
+)
 from guildmind.sandbox import (
     PatchApplyError,
     PatchPolicy,
@@ -49,6 +55,8 @@ class EvaluationStatus(StrEnum):
     INVALID_PATCH = "invalid_patch"
     PATCH_APPLY_FAILED = "patch_apply_failed"
     TIMED_OUT = "timed_out"
+    OUTPUT_EXHAUSTED = "output_exhausted"
+    OOM_KILLED = "oom_killed"
     INFRASTRUCTURE_ERROR = "infrastructure_error"
 
 
@@ -64,6 +72,7 @@ class LocalEvaluationSpec:
     timeout_seconds: float = 5.0
     max_output_bytes: int = 8_192
     max_patch_bytes: int = 65_536
+    expected_test_count: int = 1
 
     def __post_init__(self) -> None:
         if not self.task_id:
@@ -79,6 +88,8 @@ class LocalEvaluationSpec:
             raise FixtureConfigurationError("max_output_bytes must be positive")
         if self.max_patch_bytes <= 0:
             raise FixtureConfigurationError("max_patch_bytes must be positive")
+        if self.expected_test_count <= 0:
+            raise FixtureConfigurationError("expected_test_count must be positive")
         try:
             PatchPolicy(
                 allowed_paths=self.allowed_patch_paths,
@@ -132,6 +143,7 @@ class LocalEvaluationSpec:
             timeout_seconds=_optional_positive_number(raw, "timeout_seconds", 5.0),
             max_output_bytes=_optional_positive_integer(raw, "max_output_bytes", 8_192),
             max_patch_bytes=_optional_positive_integer(raw, "max_patch_bytes", 65_536),
+            expected_test_count=_required_positive_integer(raw, "expected_test_count"),
         )
 
 
@@ -145,6 +157,7 @@ class LocalEvaluationResult:
     stdout: str = ""
     stderr: str = ""
     output_truncated: bool = False
+    execution: dict[str, JsonValue] = field(default_factory=dict)
 
     @property
     def passed(self) -> bool:
@@ -170,7 +183,7 @@ class LocalEvaluationResult:
         if self.status is EvaluationStatus.PASSED:
             outcome = "passed"
             score = 1.0
-        elif self.status is EvaluationStatus.TESTS_FAILED:
+        elif self.status is not EvaluationStatus.INFRASTRUCTURE_ERROR:
             outcome = "failed"
             score = 0.0
         else:
@@ -182,6 +195,7 @@ class LocalEvaluationResult:
             "stdout": self.stdout,
             "stderr": self.stderr,
             "output_truncated": self.output_truncated,
+            "execution": self.execution,
         }
         return EvaluationResult(
             evaluation_id=evaluation_id,
@@ -200,6 +214,15 @@ class LocalEvaluationResult:
 
 class LocalEvaluator:
     """Apply a patch to copies and run hidden unittest files with local bounds."""
+
+    @property
+    def evaluator_version(self) -> str:
+        return "guildmind/local-fixture-v1"
+
+    @property
+    def environment_digest(self) -> str:
+        digest = sha256_bytes(b"guildmind/local-fixture-evaluator-v1")
+        return f"sha256:{digest}"
 
     def evaluate(self, spec: LocalEvaluationSpec, patch_path: Path) -> LocalEvaluationResult:
         policy = PatchPolicy(
@@ -487,6 +510,13 @@ def _optional_positive_number(raw: dict[str, object], key: str, default: float) 
 
 def _optional_positive_integer(raw: dict[str, object], key: str, default: int) -> int:
     value = raw.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise FixtureConfigurationError(f"{key} must be a positive integer")
+    return value
+
+
+def _required_positive_integer(raw: dict[str, object], key: str) -> int:
+    value = raw.get(key)
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         raise FixtureConfigurationError(f"{key} must be a positive integer")
     return value

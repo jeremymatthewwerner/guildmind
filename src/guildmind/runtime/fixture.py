@@ -22,6 +22,9 @@ from guildmind.storage import FileArtifactStore
 def materialize_fixture_task(
     fixture_root: Path,
     artifact_store: FileArtifactStore,
+    *,
+    evaluator_version: str,
+    environment_digest: str,
 ) -> tuple[TaskSpec, LocalEvaluationSpec, str]:
     local_spec = load_fixture(fixture_root)
     raw_manifest = TypeAdapter(dict[str, JsonValue]).validate_python(
@@ -64,20 +67,19 @@ def materialize_fixture_task(
         "repository_snapshot_sha256": repository_snapshot.sha256,
     }
     task_hash = canonical_sha256(identity)
-    environment_hash = sha256_bytes(b"guildmind/local-fixture-evaluator-v1")
     task = TaskSpec(
         task_id=local_spec.task_id,
         source="guildmind-fixture-v1",
         split="fixture",
         repository=f"guildmind/fixtures/{fixture_root.name}",
         repository_commit="fixture-v1",
-        image_digest=f"sha256:{environment_hash}",
+        image_digest=environment_digest,
         task_content_hash=task_hash,
         problem_statement=problem_artifact,
         repository_snapshot=repository_snapshot,
         visible_tests=tuple(visible_tests),
         metadata={
-            "adapter": "trusted-local-engineering-only",
+            "evaluator_version": evaluator_version,
             "network_required": False,
         },
     )

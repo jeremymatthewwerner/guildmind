@@ -2,7 +2,16 @@
 
 **Status:** Stage 0 design; controls are requirements, not claims of implementation<br>
 **Date:** 2026-07-31<br>
+**Last implementation review:** 2026-08-01<br>
 **Applies to:** Experiment 0001 worker execution, search, evidence storage, and sealed evaluation
+
+## Current implementation evidence
+
+The [2026-08-01 Stage 1 hardening checkpoint](reviews/2026-08-01-stage-1-hardening-gate.md) partially implements the container contract, an image-owned disposable evaluator, and crash-to-terminal recovery. A development smoke on rootful ARM Docker Desktop exercised the declared restrictions and produced the expected gold-fixture result. That smoke is not hostile-code containment evidence.
+
+The Stage 1 security gate is **not passed**. T-03 through T-06, T-10, T-11, and T-13 have partial code or contract-test evidence, but their required adversarial and recovery matrix has not run on the dedicated rootless x86_64 Linux reference host. In addition, the current evaluator has a demonstrated architecture defect that a reference host would not fix: candidate code is imported into the same Python interpreter as the trusted `unittest` harness and can read the mounted grader. The checked-in [`unittest` tampering patch](../fixtures/001-python-addition/adversarial/unittest-tampering.patch) monkeypatches the runner and forges a passing result; its strict expected-failure test is retained as gate evidence. The parser rejects naïve duplicate/nonfinal output markers, but that is not protection against same-process tampering or hidden-test disclosure. A configured Docker option is also not proof of enforcement, containers share a kernel, and a bounded writable filesystem still needs a demonstrated hard byte quota.
+
+External repositories, arbitrary model-generated commands, and provider-backed campaigns remain blocked. The detailed matrix and reference-host procedure live in the checkpoint report; the normative controls below are unchanged.
 
 ## 1. Security objectives
 
@@ -38,7 +47,7 @@ No one person both changes candidates and unilaterally controls the confirmation
 | Lockbox escrow | Task manifest, worker/grader bundles, hidden tests, gold/QA data | Candidate outputs, search database, model credentials |
 | Research control plane | Approved genomes, visible task bundle, model credentials, scheduler, budget ledger, artifact references | Grader bundle before an authorized evaluation |
 | Worker sandbox | Randomized task alias, prompt, sanitized repository snapshot, visible tests, bounded workspace | Network, credentials, Docker socket, hidden tests, evaluator code, gold data, future history, search/lockbox indexes |
-| Evaluator sandbox | Fresh clean repository, submitted patch, immutable out-of-tree grader, hidden tests | Model credentials, search state, writable grader definition, network |
+| Evaluator sandbox | Fresh clean repository, submitted patch, immutable out-of-tree grader, hidden tests | Model credentials, search state, writable grader definition, network. Candidate code must not be able to read grader files or mutate the trusted result-producing process; the current fixture harness does not yet satisfy this. |
 | Evidence store | Immutable artifacts, transactional events/ledger, hashes, access log | Undeclared mutable replacements for committed evidence |
 
 Model requests are brokered by the trusted control plane. The worker sandbox never receives provider credentials. A worker yields a patch as untrusted data; the evaluator validates and applies it to a fresh repository before running a fixed test command.
@@ -58,7 +67,7 @@ Critical assets are lockbox membership and metadata; hidden tests and gold patch
 | T-03 | Worker retrieves solutions or exfiltrates data over a network | Docker `none` network, offline prebuilt dependencies, no proxy variables or host service route | Worker DNS/TCP/Unix-socket escape suite fails closed |
 | T-04 | Worker steals credentials or controls Docker/host | No secrets or Docker socket in sandbox; non-root UID; rootless daemon; read-only base; dropped capabilities; `no-new-privileges`; seccomp | Probe host paths, environment, metadata endpoints, daemon sockets, and privilege escalation |
 | T-05 | Candidate escapes resource limits or multiplies them with more agents | cgroup v2 CPU/memory/PID limits, real writable quota, output/wall caps applied to the whole organization attempt | `doctor` refuses authoritative runs when enforcement is absent; fork/disk/output bombs terminate within caps |
-| T-06 | Candidate alters or evades the evaluator | Fresh evaluator sandbox; immutable out-of-tree grader and fixed command; no network/credentials; resource limits equivalent to worker containment | No-op, visible-test-only, unsafe, timeout, and gold patches must produce expected discrimination |
+| T-06 | Candidate alters or evades the evaluator | Fresh evaluator sandbox; immutable out-of-tree grader and fixed command; candidate execution separated from the trusted result producer and unable to read grader files; no network/credentials; resource limits equivalent to worker containment | No-op, visible-test-only, same-interpreter tampering, grader-read, unsafe, timeout, and gold patches must produce expected discrimination. The current tampering case is an expected failure, so this control is open. |
 | T-07 | Malicious patch writes outside the repository or changes grader inputs | Parse before apply; reject traversal, absolute/unexpected paths, symlink and submodule mode changes, oversize/binary payloads, and grader/test paths | Patch corpus covers traversal, symlink, submodule, binary, decompression, and file-count attacks |
 | T-08 | Candidate injects a forged score or artifact reference | Evaluator creates results from committed task/patch/image/evaluator hashes; workers cannot write evidence DB; one control-plane writer validates state transitions | Cross-record hash/state tests; mismatched or missing references fail closed |
 | T-09 | More agents spend more than the control | Reserve worst-case debit before dispatch; aggregate caps; disable hidden retries; conservative unknown-usage debit | Concurrent exhaustion and crash tests prove no new work starts beyond cap |

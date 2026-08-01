@@ -1,4 +1,6 @@
-.PHONY: check determinism format lint schemas sync test typecheck
+.PHONY: check determinism evaluator-image format lint schemas sync test typecheck
+
+EVALUATOR_IMAGE ?= guildmind/evaluator:stage1-dev
 
 sync:
 	uv sync
@@ -22,5 +24,9 @@ schemas:
 
 determinism:
 	uv run python scripts/check_determinism.py --repetitions 100
+
+evaluator-image:
+	docker buildx build --platform linux/amd64 --provenance=false --sbom=false \
+		--build-arg SOURCE_DATE_EPOCH=0 --load --tag $(EVALUATOR_IMAGE) containers/evaluator
 
 check: lint typecheck test

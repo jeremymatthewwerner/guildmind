@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from guildmind.domain import (
-    ArtifactRef,
     BudgetLimits,
     EvaluationResult,
     EventRecord,
@@ -15,9 +14,9 @@ from guildmind.domain import (
     TaskSpec,
     canonical_json,
 )
-from guildmind.evaluation import EvaluationStatus, LocalEvaluator
+from guildmind.evaluation import EvaluationStatus, Evaluator, LocalEvaluator
 from guildmind.models import ModelClient
-from guildmind.runtime.budget import BudgetAuthority
+from guildmind.runtime.budget import BudgetAuthority, BudgetExceededError
 from guildmind.runtime.clock import Clock, SystemClock
 from guildmind.runtime.fixture import materialize_fixture_task
 from guildmind.runtime.replay import ReplayState, replay_events, semantic_digest
@@ -37,14 +36,14 @@ class FixtureRunResult:
 
 
 class FixtureRunner:
-    """Run a trusted repository fixture through the local engineering adapter."""
+    """Run a repository fixture through a bounded engineering evaluator."""
 
     def __init__(
         self,
         *,
         state_directory: Path,
         clock: Clock | None = None,
-        evaluator: LocalEvaluator | None = None,
+        evaluator: Evaluator | None = None,
     ) -> None:
         self.state_directory = state_directory.resolve()
         self.state_directory.mkdir(parents=True, exist_ok=True)
@@ -67,7 +66,10 @@ class FixtureRunner:
         database_path = self.state_directory / "runs.db"
         artifact_store = FileArtifactStore(artifact_root)
         task, local_spec, problem_statement = materialize_fixture_task(
-            fixture_root.resolve(), artifact_store
+            fixture_root.resolve(),
+            artifact_store,
+            evaluator_version=self.evaluator.evaluator_version,
+            environment_digest=self.evaluator.environment_digest,
         )
         task_artifact = artifact_store.put_text(
             canonical_json(task), media_type="application/vnd.guildmind.task+json"
@@ -95,105 +97,115 @@ class FixtureRunner:
 
         with EventStore(database_path, clock=self.clock) as event_store:
             event_store.create_run(pending)
-            started_at = self.clock.stamp().occurred_at
-            running = _transition_manifest(
-                pending,
-                status=RunStatus.RUNNING,
-                started_at=started_at,
-            )
-            event_store.append_event(
-                run_id=run_id,
-                event_type="run.started",
-                payload={"requested_model": model.model_id},
-                manifest=running,
-            )
-            _record_artifact(event_store, run_id, "task_spec", task_artifact)
+            try:
+                started_at = self.clock.stamp().occurred_at
+                event_store.start_run(
+                    run_id,
+                    started_at=started_at,
+                    requested_model=model.model_id,
+                )
+                event_store.record_artifact(run_id, "task_spec", task_artifact)
 
-            reservation_id = "model-request-0001"
-            authority.reserve(reservation_id, model.maximum_usage)
-            _record_budget_snapshot(event_store, run_id, authority)
-            response = model.propose_patch(problem_statement)
-            patch_artifact = artifact_store.put_bytes(
-                response.patch,
-                media_type="text/x-diff; charset=utf-8",
-            )
-            _record_artifact(event_store, run_id, "patch", patch_artifact)
-            authority.reconcile(reservation_id, response.usage)
-            _record_budget_snapshot(event_store, run_id, authority)
+                reservation_id = "model-request-0001"
+                maximum_usage = model.maximum_usage
+                authority.reserve(reservation_id, maximum_usage)
+                event_store.start_model_request(
+                    run_id=run_id,
+                    request_id=reservation_id,
+                    maximum=maximum_usage,
+                    budget_used=authority.used,
+                    budget_reserved=authority.reserved,
+                )
+                response = model.propose_patch(problem_statement)
+                patch_artifact = artifact_store.put_bytes(
+                    response.patch,
+                    media_type="text/x-diff; charset=utf-8",
+                )
+                authority.reconcile(reservation_id, response.usage)
+                event_store.complete_model_response(
+                    run_id=run_id,
+                    request_id=reservation_id,
+                    returned_model=response.returned_model,
+                    actual_usage=response.usage,
+                    patch=patch_artifact,
+                    budget_used=authority.used,
+                    budget_reserved=authority.reserved,
+                )
 
-            local_result = self.evaluator.evaluate(
-                local_spec,
-                artifact_store.path_for(patch_artifact),
-            )
-            terminal_status = _terminal_status(local_result.status)
-            evaluated_at = self.clock.stamp().occurred_at
-            evaluation = local_result.to_domain_result(
-                task,
-                evaluation_id=f"{run_id}:evaluation:0001",
-                run_id=run_id,
-                run_status=terminal_status,
-                evaluator_version="guildmind/local-fixture-v1",
-                patch_hash=patch_artifact.sha256,
-                evaluated_at=evaluated_at,
-            )
-            stdout_artifact = artifact_store.put_text(local_result.stdout)
-            stderr_artifact = artifact_store.put_text(local_result.stderr)
-            evaluation = EvaluationResult.model_validate(
-                {
-                    **evaluation.model_dump(),
-                    "evidence": (stdout_artifact, stderr_artifact),
-                }
-            )
-            evaluation_artifact = artifact_store.put_text(
-                canonical_json(evaluation),
-                media_type="application/vnd.guildmind.evaluation+json",
-            )
-            _record_artifact(event_store, run_id, "evaluation_stdout", stdout_artifact)
-            _record_artifact(event_store, run_id, "evaluation_stderr", stderr_artifact)
-            _record_artifact(event_store, run_id, "evaluation", evaluation_artifact)
-            event_store.append_event(
-                run_id=run_id,
-                event_type="evaluation.completed",
-                payload={
-                    "outcome": evaluation.outcome,
-                    "result_sha256": evaluation.result_sha256,
-                    "score": evaluation.score,
-                    "status": local_result.status.value,
-                },
-            )
+                artifact_store.verify(patch_artifact)
+                local_result = self.evaluator.evaluate(
+                    local_spec,
+                    artifact_store.path_for(patch_artifact),
+                )
+                terminal_status = _terminal_status(local_result.status)
+                evaluated_at = self.clock.stamp().occurred_at
+                evaluation = local_result.to_domain_result(
+                    task,
+                    evaluation_id=f"{run_id}:evaluation:0001",
+                    run_id=run_id,
+                    run_status=terminal_status,
+                    evaluator_version=self.evaluator.evaluator_version,
+                    patch_hash=patch_artifact.sha256,
+                    evaluated_at=evaluated_at,
+                )
+                stdout_artifact = artifact_store.put_text(local_result.stdout)
+                stderr_artifact = artifact_store.put_text(local_result.stderr)
+                evaluation = EvaluationResult.model_validate(
+                    {
+                        **evaluation.model_dump(),
+                        "evidence": (stdout_artifact, stderr_artifact),
+                    }
+                )
+                evaluation_artifact = artifact_store.put_text(
+                    canonical_json(evaluation),
+                    media_type="application/vnd.guildmind.evaluation+json",
+                )
 
-            finished_at = self.clock.stamp().occurred_at
-            terminal_reason = None
-            if terminal_status is not RunStatus.SUCCEEDED:
-                terminal_reason = local_result.status.value
-            final_manifest = _transition_manifest(
-                running,
-                returned_model=response.returned_model,
-                status=terminal_status,
-                finished_at=finished_at,
-                terminal_reason=terminal_reason,
-                artifacts={
-                    "evaluation": evaluation_artifact,
-                    "evaluation_stderr": stderr_artifact,
-                    "evaluation_stdout": stdout_artifact,
-                    "patch": patch_artifact,
-                    "task_spec": task_artifact,
-                },
-            )
-            event_store.append_event(
-                run_id=run_id,
-                event_type="run.terminal",
-                payload={
-                    "evaluation_outcome": evaluation.outcome,
-                    "status": terminal_status.value,
-                },
-                manifest=final_manifest,
-                budget_used=authority.used,
-                budget_reserved=authority.reserved,
-            )
-            events = event_store.list_events(run_id)
+                finished_at = self.clock.stamp().occurred_at
+                terminal_reason = None
+                if terminal_status is not RunStatus.SUCCEEDED:
+                    terminal_reason = local_result.status.value
+                final_manifest = event_store.complete_evaluation(
+                    run_id=run_id,
+                    artifacts={
+                        "evaluation": evaluation_artifact,
+                        "evaluation_stderr": stderr_artifact,
+                        "evaluation_stdout": stdout_artifact,
+                    },
+                    evaluation_payload={
+                        "outcome": evaluation.outcome,
+                        "result_sha256": evaluation.result_sha256,
+                        "score": evaluation.score,
+                        "status": local_result.status.value,
+                    },
+                    status=terminal_status,
+                    finished_at=finished_at,
+                    terminal_reason=terminal_reason,
+                    budget_used=authority.used,
+                    budget_reserved=authority.reserved,
+                )
+                events = event_store.list_events(run_id)
+            except BudgetExceededError as error:
+                try:
+                    event_store.complete_budget_exhaustion(
+                        run_id,
+                        finished_at=self.clock.stamp().occurred_at,
+                    )
+                except BaseException as recovery_error:
+                    error.add_note(f"budget terminalization also failed: {recovery_error!r}")
+                raise
+            except BaseException as error:
+                try:
+                    event_store.recover_run(
+                        run_id,
+                        finished_at=self.clock.stamp().occurred_at,
+                        terminal_reason="runner_exception",
+                    )
+                except BaseException as recovery_error:
+                    error.add_note(f"run recovery also failed: {recovery_error!r}")
+                raise
 
-        replay = replay_events(events)
+        replay = replay_events(events, require_terminal=True)
         return FixtureRunResult(
             task=task,
             manifest=final_manifest,
@@ -205,49 +217,22 @@ class FixtureRunner:
             artifact_root=artifact_root,
         )
 
+    def recover(self, run_id: str) -> RunManifest:
+        """Explicitly terminalize a previously interrupted run without retrying it."""
 
-def _transition_manifest(manifest: RunManifest, **changes: object) -> RunManifest:
-    return RunManifest.model_validate({**manifest.model_dump(), **changes})
-
-
-def _record_artifact(
-    event_store: EventStore,
-    run_id: str,
-    name: str,
-    artifact: ArtifactRef,
-) -> None:
-    event_store.append_event(
-        run_id=run_id,
-        event_type="artifact.recorded",
-        payload={
-            "media_type": artifact.media_type,
-            "name": name,
-            "sha256": artifact.sha256,
-            "size_bytes": artifact.size_bytes,
-        },
-    )
-
-
-def _record_budget_snapshot(
-    event_store: EventStore,
-    run_id: str,
-    authority: BudgetAuthority,
-) -> None:
-    event_store.append_event(
-        run_id=run_id,
-        event_type="budget.snapshot",
-        payload={
-            "used": authority.used.model_dump(mode="json"),
-            "reserved": authority.reserved.model_dump(mode="json"),
-        },
-        budget_used=authority.used,
-        budget_reserved=authority.reserved,
-    )
+        database_path = self.state_directory / "runs.db"
+        with EventStore(database_path, clock=self.clock) as event_store:
+            return event_store.recover_run(
+                run_id,
+                finished_at=self.clock.stamp().occurred_at,
+            )
 
 
 def _terminal_status(status: EvaluationStatus) -> RunStatus:
+    if status is EvaluationStatus.PASSED:
+        return RunStatus.SUCCEEDED
     if status is EvaluationStatus.TIMED_OUT:
         return RunStatus.TIMED_OUT
     if status is EvaluationStatus.INFRASTRUCTURE_ERROR:
         return RunStatus.INFRASTRUCTURE_ERROR
-    return RunStatus.SUCCEEDED
+    return RunStatus.FAILED
