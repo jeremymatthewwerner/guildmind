@@ -1,0 +1,7 @@
+diff --git a/addition.py b/addition.py
+--- a/addition.py
++++ b/addition.py
+@@ -7 +7,2 @@ def add(left: int, right: int) -> int:
+-    return left - right
++    while True:
++        pass

@@ -13,6 +13,7 @@ import pytest
 
 from guildmind.domain import ArtifactRef, RunStatus, TaskSpec, canonical_sha256, sha256_bytes
 from guildmind.evaluation import EvaluationStatus, LocalEvaluator, load_fixture
+from guildmind.sandbox import PatchPolicy, copy_and_apply_patch
 
 _REPOSITORY_ROOT = Path(__file__).parents[2]
 _FIXTURE = _REPOSITORY_ROOT / "fixtures" / "001-python-addition"
@@ -115,18 +116,12 @@ def test_local_result_converts_to_content_verified_domain_result() -> None:
     assert domain_result.result_sha256 == canonical_sha256(domain_result.result)
 
 
-def test_visible_only_patch_fails_the_hidden_evaluator(tmp_path: Path) -> None:
-    patch = tmp_path / "visible-only.patch"
-    patch.write_text(
-        """diff --git a/addition.py b/addition.py
---- a/addition.py
-+++ b/addition.py
-@@ -7 +7 @@ def add(left: int, right: int) -> int:
--    return left - right
-+    return left + right if left >= 0 and right >= 0 else 0
-""",
-        encoding="utf-8",
-    )
+@pytest.mark.parametrize(
+    "patch_name",
+    ["no-op.patch", "visible-only.patch", "wrong-operation.patch"],
+)
+def test_checked_in_functional_controls_fail_the_local_evaluator(patch_name: str) -> None:
+    patch = _FIXTURE / "adversarial" / patch_name
 
     result = LocalEvaluator().evaluate(load_fixture(_FIXTURE), patch)
     replay = LocalEvaluator().evaluate(load_fixture(_FIXTURE), patch)
@@ -137,6 +132,36 @@ def test_visible_only_patch_fails_the_hidden_evaluator(tmp_path: Path) -> None:
     assert result.exit_code == 1
     assert "FAILED" in result.stderr
     assert "guildmind-evaluation-" not in result.stderr
+
+
+def test_visible_only_control_passes_visible_tests_before_hidden_failure(
+    tmp_path: Path,
+) -> None:
+    spec = load_fixture(_FIXTURE)
+    patch = _FIXTURE / "adversarial" / "visible-only.patch"
+    patched_workspace = tmp_path / "patched-workspace"
+    copy_and_apply_patch(
+        spec.pristine_workspace,
+        patch,
+        patched_workspace,
+        PatchPolicy(
+            allowed_paths=spec.allowed_patch_paths,
+            max_patch_bytes=spec.max_patch_bytes,
+        ),
+    )
+
+    visible = subprocess.run(
+        [sys.executable, "-m", "unittest", "test_visible.py"],
+        cwd=patched_workspace,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        capture_output=True,
+        check=False,
+        timeout=5,
+    )
+    authoritative = LocalEvaluator().evaluate(spec, patch)
+
+    assert visible.returncode == 0
+    assert authoritative.status is EvaluationStatus.TESTS_FAILED
 
 
 def test_cleanly_rejects_a_patch_with_stale_context(tmp_path: Path) -> None:

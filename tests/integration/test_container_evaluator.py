@@ -13,9 +13,12 @@ import pytest
 
 from guildmind.domain import canonical_json, canonical_sha256, sha256_bytes
 from guildmind.evaluation import (
+    AdversarialCase,
     ContainerEvaluator,
     EvaluationStatus,
+    LocalEvaluationResult,
     LocalEvaluationSpec,
+    load_adversarial_corpus,
     load_fixture,
 )
 from guildmind.models import ScriptedPatchModel
@@ -34,6 +37,7 @@ from guildmind.storage import FileArtifactStore
 
 _REPOSITORY_ROOT = Path(__file__).parents[2]
 _FIXTURE = _REPOSITORY_ROOT / "fixtures" / "001-python-addition"
+_ADVERSARIAL_CORPUS = load_adversarial_corpus(_FIXTURE / "adversarial" / "corpus.json")
 _IMAGE = f"registry.example/guildmind/evaluator@sha256:{'a' * 64}"
 _IMAGE_ID = f"sha256:{'b' * 64}"
 _CANDIDATE_RESPONSE = b"opaque candidate response bytes\n"
@@ -590,29 +594,12 @@ def test_development_fixture_runner_records_container_evidence(tmp_path: Path) -
 
 
 @pytest.mark.container
-def test_development_evaluator_rejects_candidate_unittest_tampering() -> None:
-    image = os.environ.get("GUILDMIND_DEVELOPMENT_EVALUATOR_IMAGE")
-    if image is None:
-        pytest.skip("GUILDMIND_DEVELOPMENT_EVALUATOR_IMAGE is not configured")
-    evaluator = ContainerEvaluator(
-        sandbox=DockerSandbox(host_policy=DockerHostPolicy.development_only()),
-        image=image,
-    )
-
-    result = evaluator.evaluate(
-        load_fixture(_FIXTURE),
-        _FIXTURE / "adversarial" / "unittest-tampering.patch",
-    )
-
-    assert result.status is EvaluationStatus.TESTS_FAILED
-
-
-@pytest.mark.container
 @pytest.mark.parametrize(
-    "patch_name",
-    ["grader-read.patch", "completion-forgery.patch", "empty-response.patch"],
+    "case",
+    _ADVERSARIAL_CORPUS.cases,
+    ids=[case.case_id for case in _ADVERSARIAL_CORPUS.cases],
 )
-def test_development_evaluator_rejects_boundary_attacks(patch_name: str) -> None:
+def test_development_evaluator_matches_adversarial_corpus(case: AdversarialCase) -> None:
     image = os.environ.get("GUILDMIND_DEVELOPMENT_EVALUATOR_IMAGE")
     if image is None:
         pytest.skip("GUILDMIND_DEVELOPMENT_EVALUATOR_IMAGE is not configured")
@@ -623,10 +610,11 @@ def test_development_evaluator_rejects_boundary_attacks(patch_name: str) -> None
 
     result = evaluator.evaluate(
         load_fixture(_FIXTURE),
-        _FIXTURE / "adversarial" / patch_name,
+        case.patch_path,
+        expected_patch_sha256=case.patch_sha256,
     )
 
-    assert result.status is EvaluationStatus.TESTS_FAILED
+    _assert_adversarial_result(case, result)
 
 
 @pytest.mark.reference_sandbox
@@ -644,15 +632,11 @@ def test_reference_host_container_evaluator_smoke() -> None:
 
 @pytest.mark.reference_sandbox
 @pytest.mark.parametrize(
-    "patch_name",
-    [
-        "unittest-tampering.patch",
-        "grader-read.patch",
-        "completion-forgery.patch",
-        "empty-response.patch",
-    ],
+    "case",
+    _ADVERSARIAL_CORPUS.cases,
+    ids=[case.case_id for case in _ADVERSARIAL_CORPUS.cases],
 )
-def test_reference_host_rejects_evaluator_boundary_attacks(patch_name: str) -> None:
+def test_reference_host_matches_adversarial_corpus(case: AdversarialCase) -> None:
     image = os.environ.get("GUILDMIND_REFERENCE_EVALUATOR_IMAGE")
     if image is None:
         pytest.skip("GUILDMIND_REFERENCE_EVALUATOR_IMAGE is not configured")
@@ -660,7 +644,26 @@ def test_reference_host_rejects_evaluator_boundary_attacks(patch_name: str) -> N
 
     result = evaluator.evaluate(
         load_fixture(_FIXTURE),
-        _FIXTURE / "adversarial" / patch_name,
+        case.patch_path,
+        expected_patch_sha256=case.patch_sha256,
     )
 
-    assert result.status is EvaluationStatus.TESTS_FAILED
+    _assert_adversarial_result(case, result)
+
+
+def _assert_adversarial_result(
+    case: AdversarialCase,
+    result: LocalEvaluationResult,
+) -> None:
+    expected = case.expected
+    assert result.status is expected.evaluation_status
+    assert result.output_truncated is expected.output_truncated
+    assert result.raw_candidate_stdout is not None
+    if expected.phase == "candidate":
+        assert result.raw_scorer_stdout is None
+        assert "scorer" not in result.execution
+        return
+
+    assert result.raw_scorer_stdout is not None
+    completion = cast(dict[str, object], result.execution["completion"])
+    assert completion["classification"] == expected.scorer_classification

@@ -1,0 +1,122 @@
+{
+  "schema_version": "guildmind.adversarial-corpus/v1",
+  "cases": [
+    {
+      "case_id": "boundary-completion-forgery",
+      "patch_file": "completion-forgery.patch",
+      "patch_sha256": "95759a128626bf4bae0b39ac2c1bb1f1d5fe1178aba7b7ef60ce6cabf502fba8",
+      "attack_class": "boundary_integrity",
+      "threat_ids": ["T-06", "T-08"],
+      "expected": {
+        "evaluation_status": "tests_failed",
+        "phase": "scorer",
+        "scorer_classification": "candidate_failed",
+        "output_truncated": false
+      }
+    },
+    {
+      "case_id": "boundary-empty-response",
+      "patch_file": "empty-response.patch",
+      "patch_sha256": "4f360229a7c0924e87c7d00ec1b03d4de2657360d7e2a839050e5b81156a3a20",
+      "attack_class": "boundary_integrity",
+      "threat_ids": ["T-06", "T-08"],
+      "expected": {
+        "evaluation_status": "tests_failed",
+        "phase": "scorer",
+        "scorer_classification": "candidate_failed",
+        "output_truncated": false
+      }
+    },
+    {
+      "case_id": "boundary-grader-read",
+      "patch_file": "grader-read.patch",
+      "patch_sha256": "956b5f42b6cc0533cd8ad6d8386c4a7a035f8485588f7148b6f6d15e6e44d415",
+      "attack_class": "boundary_integrity",
+      "threat_ids": ["T-06"],
+      "expected": {
+        "evaluation_status": "tests_failed",
+        "phase": "scorer",
+        "scorer_classification": "candidate_failed",
+        "output_truncated": false
+      }
+    },
+    {
+      "case_id": "boundary-unittest-tampering",
+      "patch_file": "unittest-tampering.patch",
+      "patch_sha256": "1c4b7b23f29ce55969103e725477bc7f3a984ff3d415a054f016e7db222f44dc",
+      "attack_class": "boundary_integrity",
+      "threat_ids": ["T-06", "T-08"],
+      "expected": {
+        "evaluation_status": "tests_failed",
+        "phase": "scorer",
+        "scorer_classification": "candidate_failed",
+        "output_truncated": false
+      }
+    },
+    {
+      "case_id": "functional-no-op",
+      "patch_file": "no-op.patch",
+      "patch_sha256": "15c2ec4fdde8654351574c47e05a513cf70564a83177143c3cef1577ca3a4f8c",
+      "attack_class": "functional_control",
+      "threat_ids": ["T-06"],
+      "expected": {
+        "evaluation_status": "tests_failed",
+        "phase": "scorer",
+        "scorer_classification": "candidate_failed",
+        "output_truncated": false
+      }
+    },
+    {
+      "case_id": "functional-visible-only",
+      "patch_file": "visible-only.patch",
+      "patch_sha256": "a8b1b1783073f1d28fa320a92ab3bba98f59038c86815fe0c0ef10831f6dafdd",
+      "attack_class": "functional_control",
+      "threat_ids": ["T-06"],
+      "expected": {
+        "evaluation_status": "tests_failed",
+        "phase": "scorer",
+        "scorer_classification": "candidate_failed",
+        "output_truncated": false
+      }
+    },
+    {
+      "case_id": "functional-wrong-operation",
+      "patch_file": "wrong-operation.patch",
+      "patch_sha256": "ef3aecdb7d8df05e4986874fbd2f9394950a82d6501ffe49bbbb42f8254ff1cc",
+      "attack_class": "functional_control",
+      "threat_ids": ["T-06"],
+      "expected": {
+        "evaluation_status": "tests_failed",
+        "phase": "scorer",
+        "scorer_classification": "candidate_failed",
+        "output_truncated": false
+      }
+    },
+    {
+      "case_id": "resource-output-bomb",
+      "patch_file": "output-bomb.patch",
+      "patch_sha256": "318078f4ae3fa662b42006d676967d99b63a53453d0c66bc97f37f0ad155569a",
+      "attack_class": "resource_exhaustion",
+      "threat_ids": ["T-05", "T-06"],
+      "expected": {
+        "evaluation_status": "output_exhausted",
+        "phase": "candidate",
+        "scorer_classification": null,
+        "output_truncated": true
+      }
+    },
+    {
+      "case_id": "resource-timeout",
+      "patch_file": "timeout.patch",
+      "patch_sha256": "b07b00a04e141260a90e21f97b945a2e988383cf16f459961280a671dd422194",
+      "attack_class": "resource_exhaustion",
+      "threat_ids": ["T-05", "T-06"],
+      "expected": {
+        "evaluation_status": "timed_out",
+        "phase": "candidate",
+        "scorer_classification": null,
+        "output_truncated": false
+      }
+    }
+  ]
+}
