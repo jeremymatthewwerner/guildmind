@@ -8,8 +8,10 @@ from guildmind.evaluation.local import (
     LocalEvaluationResult,
     LocalEvaluationSpec,
     LocalEvaluator,
+    PythonCallProtocol,
     load_fixture,
 )
+from guildmind.evaluation.protocol import PythonCallBundle, load_python_call_bundle
 
 __all__ = [
     "ContainerEvaluator",
@@ -20,5 +22,8 @@ __all__ = [
     "LocalEvaluationResult",
     "LocalEvaluationSpec",
     "LocalEvaluator",
+    "PythonCallBundle",
+    "PythonCallProtocol",
     "load_fixture",
+    "load_python_call_bundle",
 ]

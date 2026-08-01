@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -10,7 +11,12 @@ from guildmind.domain import (
     RunStatus,
     TaskSpec,
 )
-from guildmind.evaluation import LocalEvaluator
+from guildmind.evaluation import (
+    EvaluationStatus,
+    LocalEvaluationResult,
+    LocalEvaluationSpec,
+    LocalEvaluator,
+)
 from guildmind.models import ModelResponse, ScriptedPatchModel
 from guildmind.runtime import BudgetExceededError, DeterministicClock, replay_events
 from guildmind.runtime.runner import FixtureRunner, FixtureRunResult
@@ -49,6 +55,74 @@ class IdentifiedLocalEvaluator(LocalEvaluator):
     @property
     def environment_digest(self) -> str:
         return f"sha256:{'d' * 64}"
+
+
+class TranscriptLocalEvaluator(IdentifiedLocalEvaluator):
+    candidate_stdout = b""
+    scorer_stdout = b"\xffopaque scorer stdout\n"
+
+    def evaluate(
+        self,
+        spec: LocalEvaluationSpec,
+        patch_path: Path,
+        *,
+        expected_patch_sha256: str | None = None,
+    ) -> LocalEvaluationResult:
+        return replace(
+            super().evaluate(
+                spec,
+                patch_path,
+                expected_patch_sha256=expected_patch_sha256,
+            ),
+            raw_candidate_stdout=self.candidate_stdout,
+            raw_scorer_stdout=self.scorer_stdout,
+        )
+
+
+class CandidateFailureTranscriptEvaluator(IdentifiedLocalEvaluator):
+    candidate_stdout = b"partial candidate response before failure\n"
+
+    def evaluate(
+        self,
+        spec: LocalEvaluationSpec,
+        patch_path: Path,
+        *,
+        expected_patch_sha256: str | None = None,
+    ) -> LocalEvaluationResult:
+        assert expected_patch_sha256 is not None
+        return LocalEvaluationResult(
+            task_id=spec.task_id,
+            status=EvaluationStatus.TESTS_FAILED,
+            stderr=f"candidate failed while evaluating {patch_path.name}",
+            raw_candidate_stdout=self.candidate_stdout,
+        )
+
+
+class PatchIdentityRecordingEvaluator(IdentifiedLocalEvaluator):
+    observed_patch_sha256: str | None = None
+
+    def evaluate(
+        self,
+        spec: LocalEvaluationSpec,
+        patch_path: Path,
+        *,
+        expected_patch_sha256: str | None = None,
+    ) -> LocalEvaluationResult:
+        self.observed_patch_sha256 = expected_patch_sha256
+        return super().evaluate(
+            spec,
+            patch_path,
+            expected_patch_sha256=expected_patch_sha256,
+        )
+
+
+def test_local_evaluation_result_rejects_a_scorer_only_transcript() -> None:
+    with pytest.raises(ValueError, match="scorer transcript requires a candidate"):
+        LocalEvaluationResult(
+            task_id="task",
+            status=EvaluationStatus.INFRASTRUCTURE_ERROR,
+            raw_scorer_stdout=b"orphan scorer output",
+        )
 
 
 def run_fixture(state_directory: Path, run_id: str, *, day_offset: int = 0) -> FixtureRunResult:
@@ -112,10 +186,11 @@ def test_fixture_runner_has_stable_semantic_digest_across_identity_and_time(tmp_
 
 
 def test_fixture_runner_records_the_injected_evaluator_identity(tmp_path: Path) -> None:
+    evaluator = PatchIdentityRecordingEvaluator()
     runner = FixtureRunner(
         state_directory=tmp_path / "state",
         clock=DeterministicClock(started_at=_START),
-        evaluator=IdentifiedLocalEvaluator(),
+        evaluator=evaluator,
     )
 
     result = runner.run(
@@ -129,6 +204,102 @@ def test_fixture_runner_records_the_injected_evaluator_identity(tmp_path: Path) 
     assert result.task.metadata["evaluator_version"] == ("guildmind/test-identified-evaluator-v1")
     assert result.manifest.environment_digest == result.task.image_digest
     assert result.evaluation.evaluator_version == "guildmind/test-identified-evaluator-v1"
+    assert evaluator.observed_patch_sha256 == result.manifest.artifacts["patch"].sha256
+
+
+def test_fixture_runner_persists_optional_evaluator_transcripts_as_evidence(
+    tmp_path: Path,
+) -> None:
+    evaluator = TranscriptLocalEvaluator()
+    runner = FixtureRunner(
+        state_directory=tmp_path / "state",
+        clock=DeterministicClock(started_at=_START),
+        evaluator=evaluator,
+    )
+
+    result = runner.run(
+        fixture_root=_FIXTURE,
+        model=ScriptedPatchModel(_FIXTURE / "solution.patch"),
+        run_id="run-transcript-evidence",
+        code_revision="test-revision",
+    )
+
+    expected_roles = {
+        "evaluation",
+        "evaluation_candidate_stdout",
+        "evaluation_scorer_stdout",
+        "evaluation_stderr",
+        "evaluation_stdout",
+        "patch",
+        "task_spec",
+    }
+    assert set(result.manifest.artifacts) == expected_roles
+    assert set(result.replay.artifacts) == expected_roles
+
+    artifacts = FileArtifactStore(result.artifact_root)
+    candidate = result.manifest.artifacts["evaluation_candidate_stdout"]
+    scorer = result.manifest.artifacts["evaluation_scorer_stdout"]
+    assert artifacts.get_bytes(candidate) == evaluator.candidate_stdout
+    assert artifacts.get_bytes(scorer) == evaluator.scorer_stdout
+    assert candidate.size_bytes == 0
+    assert candidate.media_type == "application/octet-stream"
+    assert scorer.media_type == "application/octet-stream"
+    assert result.evaluation.evidence == (
+        result.manifest.artifacts["evaluation_stdout"],
+        result.manifest.artifacts["evaluation_stderr"],
+        candidate,
+        scorer,
+    )
+    evaluation_artifact = result.manifest.artifacts["evaluation"]
+    persisted = EvaluationResult.model_validate_json(artifacts.get_bytes(evaluation_artifact))
+    assert persisted == result.evaluation
+
+    recorded_roles = [
+        event.payload["name"] for event in result.events if event.event_type == "artifact.recorded"
+    ]
+    assert recorded_roles == [
+        "task_spec",
+        "patch",
+        "evaluation_stdout",
+        "evaluation_stderr",
+        "evaluation_candidate_stdout",
+        "evaluation_scorer_stdout",
+        "evaluation",
+    ]
+    assert replay_events(list(result.events), require_terminal=True) == result.replay
+
+
+def test_fixture_runner_persists_candidate_transcript_when_scoring_never_runs(
+    tmp_path: Path,
+) -> None:
+    evaluator = CandidateFailureTranscriptEvaluator()
+    runner = FixtureRunner(
+        state_directory=tmp_path / "state",
+        clock=DeterministicClock(started_at=_START),
+        evaluator=evaluator,
+    )
+
+    result = runner.run(
+        fixture_root=_FIXTURE,
+        model=ScriptedPatchModel(_FIXTURE / "solution.patch"),
+        run_id="run-candidate-failure-transcript",
+        code_revision="test-revision",
+    )
+
+    assert result.manifest.status is RunStatus.FAILED
+    assert "evaluation_candidate_stdout" in result.manifest.artifacts
+    assert "evaluation_scorer_stdout" not in result.manifest.artifacts
+    candidate = result.manifest.artifacts["evaluation_candidate_stdout"]
+    artifacts = FileArtifactStore(result.artifact_root)
+    assert artifacts.get_bytes(candidate) == evaluator.candidate_stdout
+    assert result.evaluation.evidence == (
+        result.manifest.artifacts["evaluation_stdout"],
+        result.manifest.artifacts["evaluation_stderr"],
+        candidate,
+    )
+    replay = replay_events(list(result.events), require_terminal=True)
+    assert replay == result.replay
+    assert "evaluation_scorer_stdout" not in replay.absent_artifacts
 
 
 def test_raising_model_is_terminalized_as_ambiguous_and_recovery_is_idempotent(

@@ -25,6 +25,12 @@ EXPECTED_ARTIFACT_NAMES = frozenset(
         "task_spec",
     }
 )
+OPTIONAL_EVALUATION_ARTIFACT_NAMES = frozenset(
+    {
+        "evaluation_candidate_stdout",
+        "evaluation_scorer_stdout",
+    }
+)
 
 _USAGE_FIELDS = (
     "uncached_input_tokens",
@@ -502,22 +508,34 @@ def _terminal_status_matches_outcome(
 
 
 def _validate_artifact_position(state: ReplayState, name: str) -> None:
+    evaluation_evidence_predecessors = {
+        "evaluation_stderr",
+        "evaluation_stdout",
+        "patch",
+        "task_spec",
+    }
     expected_predecessors: dict[str, set[str]] = {
         "task_spec": set(),
         "patch": {"task_spec"},
         "evaluation_stdout": {"patch", "task_spec"},
         "evaluation_stderr": {"evaluation_stdout", "patch", "task_spec"},
-        "evaluation": {
-            "evaluation_stderr",
-            "evaluation_stdout",
-            "patch",
-            "task_spec",
-        },
     }
-    required = expected_predecessors.get(name)
-    if required is None:
+    recorded = set(state.artifacts)
+    if name in expected_predecessors:
+        correctly_positioned = recorded == expected_predecessors[name]
+    elif name == "evaluation_candidate_stdout":
+        correctly_positioned = recorded == evaluation_evidence_predecessors
+    elif name == "evaluation_scorer_stdout":
+        correctly_positioned = recorded == (
+            evaluation_evidence_predecessors | {"evaluation_candidate_stdout"}
+        )
+    elif name == "evaluation":
+        correctly_positioned = evaluation_evidence_predecessors.issubset(recorded) and (
+            recorded - evaluation_evidence_predecessors
+        ).issubset(OPTIONAL_EVALUATION_ARTIFACT_NAMES)
+    else:
         raise ReplayIntegrityError(f"unknown artifact role: {name}")
-    if set(state.artifacts) != required:
+    if not correctly_positioned:
         raise ReplayIntegrityError(f"artifact role is out of phase: {name}")
     if name == "task_spec" and state.model_request_state != "not_started":
         raise ReplayIntegrityError("task_spec must precede model work")

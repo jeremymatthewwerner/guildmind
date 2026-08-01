@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from guildmind.domain import ArtifactRef, RunStatus, TaskSpec, canonical_sha256
+from guildmind.domain import ArtifactRef, RunStatus, TaskSpec, canonical_sha256, sha256_bytes
 from guildmind.evaluation import EvaluationStatus, LocalEvaluator, load_fixture
 
 _REPOSITORY_ROOT = Path(__file__).parents[2]
@@ -40,6 +40,42 @@ def test_fixture_starts_with_a_visible_failure_and_solution_passes() -> None:
     assert result.exit_code == 0
     assert (spec.pristine_workspace / "addition.py").read_text(encoding="utf-8") == before
     assert "left - right" in before
+
+
+def test_loaded_fixture_evaluates_from_frozen_bytes_after_source_removal(
+    tmp_path: Path,
+) -> None:
+    fixture = tmp_path / "fixture"
+    shutil.copytree(_FIXTURE, fixture)
+    patch = tmp_path / "solution.patch"
+    shutil.copyfile(fixture / "solution.patch", patch)
+    spec = load_fixture(fixture)
+
+    assert spec.pristine_workspace_snapshot_bytes is not None
+    assert spec.pristine_workspace_sha256 == sha256_bytes(spec.pristine_workspace_snapshot_bytes)
+    assert spec.pristine_workspace.resolve() != (fixture / "workspace").resolve()
+
+    shutil.rmtree(fixture / "workspace")
+    shutil.rmtree(fixture / "grader")
+
+    result = LocalEvaluator().evaluate(spec, patch)
+
+    assert result.status is EvaluationStatus.PASSED
+
+
+def test_loaded_fixture_ignores_mutation_of_frozen_materialization(tmp_path: Path) -> None:
+    fixture = tmp_path / "fixture"
+    shutil.copytree(_FIXTURE, fixture)
+    spec = load_fixture(fixture)
+
+    shutil.rmtree(spec.pristine_workspace)
+    spec.pristine_workspace.write_bytes(b"corrupted workspace materialization")
+    for hidden_test in spec.hidden_test_files:
+        hidden_test.write_text("raise RuntimeError('corrupted hidden test')\n", encoding="utf-8")
+
+    result = LocalEvaluator().evaluate(spec, fixture / "solution.patch")
+
+    assert result.status is EvaluationStatus.PASSED
 
 
 def test_local_result_converts_to_content_verified_domain_result() -> None:
@@ -200,6 +236,17 @@ def test_rejects_oversized_patches(tmp_path: Path) -> None:
     assert result.status is EvaluationStatus.INVALID_PATCH
 
 
+def test_rejects_patch_bytes_that_do_not_match_the_committed_identity() -> None:
+    result = LocalEvaluator().evaluate(
+        load_fixture(_FIXTURE),
+        _FIXTURE / "solution.patch",
+        expected_patch_sha256="0" * 64,
+    )
+
+    assert result.status is EvaluationStatus.INFRASTRUCTURE_ERROR
+    assert "do not match the committed artifact identity" in result.stderr
+
+
 def test_rejects_symlinks_in_the_source_workspace(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     shutil.copytree(_FIXTURE / "workspace", workspace)
@@ -207,7 +254,11 @@ def test_rejects_symlinks_in_the_source_workspace(tmp_path: Path) -> None:
     target.write_text("def add(left: int, right: int) -> int:\n    return left + right\n")
     (workspace / "addition.py").unlink()
     (workspace / "addition.py").symlink_to(target)
-    spec = replace(load_fixture(_FIXTURE), pristine_workspace=workspace)
+    spec = replace(
+        load_fixture(_FIXTURE),
+        pristine_workspace=workspace,
+        _frozen_workspace=None,
+    )
 
     result = LocalEvaluator().evaluate(spec, _FIXTURE / "solution.patch")
 

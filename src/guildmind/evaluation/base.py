@@ -25,6 +25,12 @@ class Evaluator(Protocol):
         self,
         spec: LocalEvaluationSpec,
         patch_path: Path,
+        *,
+        expected_patch_sha256: str | None = None,
     ) -> LocalEvaluationResult:
-        """Evaluate a patch without exposing grader inputs to the worker."""
+        """Evaluate a patch without exposing grader inputs to the worker.
+
+        When supplied, ``expected_patch_sha256`` is the committed artifact identity
+        that the evaluator must match against the exact validated patch bytes.
+        """
         ...

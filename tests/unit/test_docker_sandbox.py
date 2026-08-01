@@ -349,7 +349,10 @@ def test_docker_create_uses_the_exact_mandatory_security_contract(tmp_path: Path
     source = (tmp_path / "source").resolve()
     source.mkdir()
     runner = FakeDockerRunner(stdout=b"ok\n")
-    sandbox = DockerSandbox(command_runner=runner)
+    sandbox = DockerSandbox(
+        command_runner=runner,
+        container_name_suffix_factory=lambda: "0" * 12,
+    )
 
     result = sandbox.run(request(source))
 
@@ -360,7 +363,7 @@ def test_docker_create_uses_the_exact_mandatory_security_contract(tmp_path: Path
     assert create == (
         "docker",
         "create",
-        "--name=guildmind-evaluation-001",
+        "--name=guildmind-evaluation-001-000000000000",
         "--pull=never",
         "--label=guildmind.managed=true",
         "--label=guildmind.execution_id=evaluation-001",
@@ -395,6 +398,25 @@ def test_docker_create_uses_the_exact_mandatory_security_contract(tmp_path: Path
     assert ("docker", "start", "--attach", CONTAINER_ID) in runner.calls
     assert ("docker", "inspect", "--format={{json .State}}", CONTAINER_ID) in runner.calls
     assert runner.calls[-1] == ("docker", "rm", "--force", CONTAINER_ID)
+
+
+def test_repeated_execution_ids_receive_unique_container_names(tmp_path: Path) -> None:
+    source = (tmp_path / "source").resolve()
+    source.mkdir()
+    suffixes = iter(("1" * 12, "2" * 12))
+    runner = FakeDockerRunner()
+    sandbox = DockerSandbox(
+        command_runner=runner,
+        container_name_suffix_factory=lambda: next(suffixes),
+    )
+
+    first = sandbox.run(request(source))
+    second = sandbox.run(request(source))
+
+    creates = [command for command in runner.calls if command[1] == "create"]
+    assert creates[0][2] == "--name=guildmind-evaluation-001-111111111111"
+    assert creates[1][2] == "--name=guildmind-evaluation-001-222222222222"
+    assert first.execution_id == second.execution_id == "evaluation-001"
 
 
 @pytest.mark.parametrize(

@@ -136,6 +136,7 @@ class FixtureRunner:
                 local_result = self.evaluator.evaluate(
                     local_spec,
                     artifact_store.path_for(patch_artifact),
+                    expected_patch_sha256=patch_artifact.sha256,
                 )
                 terminal_status = _terminal_status(local_result.status)
                 evaluated_at = self.clock.stamp().occurred_at
@@ -150,16 +151,36 @@ class FixtureRunner:
                 )
                 stdout_artifact = artifact_store.put_text(local_result.stdout)
                 stderr_artifact = artifact_store.put_text(local_result.stderr)
+                evidence = [stdout_artifact, stderr_artifact]
+                evaluation_artifacts = {
+                    "evaluation_stderr": stderr_artifact,
+                    "evaluation_stdout": stdout_artifact,
+                }
+                if local_result.raw_candidate_stdout is not None:
+                    candidate_stdout_artifact = artifact_store.put_bytes(
+                        local_result.raw_candidate_stdout,
+                        media_type="application/octet-stream",
+                    )
+                    evidence.append(candidate_stdout_artifact)
+                    evaluation_artifacts["evaluation_candidate_stdout"] = candidate_stdout_artifact
+                if local_result.raw_scorer_stdout is not None:
+                    scorer_stdout_artifact = artifact_store.put_bytes(
+                        local_result.raw_scorer_stdout,
+                        media_type="application/octet-stream",
+                    )
+                    evidence.append(scorer_stdout_artifact)
+                    evaluation_artifacts["evaluation_scorer_stdout"] = scorer_stdout_artifact
                 evaluation = EvaluationResult.model_validate(
                     {
                         **evaluation.model_dump(),
-                        "evidence": (stdout_artifact, stderr_artifact),
+                        "evidence": tuple(evidence),
                     }
                 )
                 evaluation_artifact = artifact_store.put_text(
                     canonical_json(evaluation),
                     media_type="application/vnd.guildmind.evaluation+json",
                 )
+                evaluation_artifacts["evaluation"] = evaluation_artifact
 
                 finished_at = self.clock.stamp().occurred_at
                 terminal_reason = None
@@ -167,11 +188,7 @@ class FixtureRunner:
                     terminal_reason = local_result.status.value
                 final_manifest = event_store.complete_evaluation(
                     run_id=run_id,
-                    artifacts={
-                        "evaluation": evaluation_artifact,
-                        "evaluation_stderr": stderr_artifact,
-                        "evaluation_stdout": stdout_artifact,
-                    },
+                    artifacts=evaluation_artifacts,
                     evaluation_payload={
                         "outcome": evaluation.outcome,
                         "result_sha256": evaluation.result_sha256,

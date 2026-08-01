@@ -1,0 +1,35 @@
+{
+  "schema_version": "guildmind.python-call-oracle/v1",
+  "cases": [
+    {
+      "case_id": "case-0001",
+      "args": [2, 3],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": 5}
+    },
+    {
+      "case_id": "case-0002",
+      "args": [-8, -5],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": -13}
+    },
+    {
+      "case_id": "case-0003",
+      "args": [7, -11],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": -4}
+    },
+    {
+      "case_id": "case-0004",
+      "args": [0, 19],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": 19}
+    },
+    {
+      "case_id": "case-0005",
+      "args": [2147483647, 1],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": 2147483648}
+    }
+  ]
+}

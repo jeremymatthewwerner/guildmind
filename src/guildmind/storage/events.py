@@ -24,6 +24,7 @@ from guildmind.domain import (
 from guildmind.runtime.clock import Clock, SystemClock
 from guildmind.runtime.replay import (
     EXPECTED_ARTIFACT_NAMES,
+    OPTIONAL_EVALUATION_ARTIFACT_NAMES,
     ReplayIntegrityError,
     ReplayState,
     replay_events,
@@ -309,6 +310,16 @@ class EventStore:
         if not required.issubset(artifacts):
             missing = required - set(artifacts)
             raise ValueError(f"evaluation artifacts are missing: {', '.join(sorted(missing))}")
+        allowed = required | OPTIONAL_EVALUATION_ARTIFACT_NAMES
+        if unexpected := set(artifacts) - allowed:
+            raise ValueError(
+                f"evaluation artifacts have unknown roles: {', '.join(sorted(unexpected))}"
+            )
+        if (
+            "evaluation_scorer_stdout" in artifacts
+            and "evaluation_candidate_stdout" not in artifacts
+        ):
+            raise ValueError("a scorer transcript requires a candidate transcript")
         with self._transaction():
             current = self._load_manifest_locked(run_id)
             state = self._validated_state_locked(run_id, current)
@@ -339,7 +350,13 @@ class EventStore:
                 artifacts=combined_artifacts,
             )
 
-            preferred_order = ("evaluation_stdout", "evaluation_stderr", "evaluation")
+            preferred_order = (
+                "evaluation_stdout",
+                "evaluation_stderr",
+                "evaluation_candidate_stdout",
+                "evaluation_scorer_stdout",
+                "evaluation",
+            )
             ordered_names = [name for name in preferred_order if name in artifacts]
             ordered_names.extend(sorted(set(artifacts) - set(ordered_names)))
             for name in ordered_names:

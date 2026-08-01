@@ -25,7 +25,9 @@ The worker returns a patch as hostile data. Before application, reject absolute 
 
 ### Evaluator boundary
 
-Run the patched repository in a fresh disposable evaluator container with no network, credentials, search state, or writable evaluator definition. Hidden tests and the fixed test command live in an immutable out-of-tree grader bundle. Candidate code cannot select the command or write the grader. The evaluator has independent resource/output/time caps and emits a content-hashed result identifying task, source, patch, worker/grader images, evaluator version, tests, command, and evidence.
+Run candidate code and trusted scoring in separate disposable containers with no network, credentials, search state, or writable evaluator definition. The candidate phase receives the fresh patched repository plus a sanitized challenge but no grader or expected outcomes. Its output is always hostile data. The scorer phase receives that bounded output plus an immutable out-of-tree grader but no candidate workspace and never imports candidate code. Candidate code cannot select the command, read or write the grader, or mutate the result-producing process. Only the scorer emits a completion record. The evaluator has independent resource/output/time caps and emits a content-hashed result identifying task, source, patch, worker/grader images, evaluator version, protocol inputs, observations, and evidence.
+
+The first implemented protocol is the deliberately narrow JSON-callable design in [ADR 0004](0004-two-phase-python-call-evaluator.md). Arbitrary repository test frameworks require another adapter that preserves the same trust-zone invariant; they may not fall back to importing candidate code into the trusted scorer.
 
 The control plane alone commits that result. An evaluator failure is not a worker success or failure and follows the experiment's frozen infrastructure policy.
 
@@ -39,6 +41,7 @@ Task generation and authoritative execution are pinned to x86_64 Ubuntu 22.04-co
 
 - Local subprocesses: acceptable only for repository-owned deterministic engineering fixtures, never untrusted/external tasks.
 - Reuse the worker container for grading: rejected because the candidate may alter its filesystem and evaluator inputs.
+- Import candidate modules into the trusted test runner: rejected because candidate import-time code can monkeypatch the runner and inspect any grader mounted in that process namespace.
 - Give containers a package-install network: rejected; dependencies must be prebuilt or mirrored into the immutable image.
 - Adopt a third-party agent framework or environment API as the core lifecycle: rejected because hidden orchestration would become part of the treatment.
 

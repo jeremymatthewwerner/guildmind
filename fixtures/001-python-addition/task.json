@@ -9,6 +9,12 @@
   "hidden_test_files": [
     "grader/test_hidden.py"
   ],
+  "evaluation_protocol": {
+    "kind": "python-call-v1",
+    "module": "addition",
+    "callable": "add",
+    "cases_file": "grader/cases.json"
+  },
   "network_required": false,
   "expected_test_count": 5,
   "allowed_patch_paths": [

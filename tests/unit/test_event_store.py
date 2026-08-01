@@ -59,7 +59,12 @@ def running_run(store: EventStore, run_id: str) -> RunManifest:
     )
 
 
-def populate_run(store: EventStore, run_id: str) -> list[EventRecord]:
+def populate_run(
+    store: EventStore,
+    run_id: str,
+    *,
+    evaluator_transcripts: bool = False,
+) -> list[EventRecord]:
     running_run(store, run_id)
     store.record_artifact(run_id, "task_spec", artifact("a" * 64))
     maximum = BudgetUsage(output_tokens=20, model_calls=1)
@@ -80,13 +85,17 @@ def populate_run(store: EventStore, run_id: str) -> list[EventRecord]:
         budget_used=used,
         budget_reserved=BudgetUsage(),
     )
+    evaluation_artifacts = {
+        "evaluation_stdout": artifact("c" * 64),
+        "evaluation_stderr": artifact("d" * 64),
+        "evaluation": artifact("e" * 64),
+    }
+    if evaluator_transcripts:
+        evaluation_artifacts["evaluation_candidate_stdout"] = artifact("0" * 64)
+        evaluation_artifacts["evaluation_scorer_stdout"] = artifact("1" * 64)
     store.complete_evaluation(
         run_id=run_id,
-        artifacts={
-            "evaluation_stdout": artifact("c" * 64),
-            "evaluation_stderr": artifact("d" * 64),
-            "evaluation": artifact("e" * 64),
-        },
+        artifacts=evaluation_artifacts,
         evaluation_payload={"outcome": "passed", "result_sha256": "f" * 64},
         status=RunStatus.SUCCEEDED,
         finished_at=START + timedelta(seconds=2),
@@ -142,6 +151,48 @@ def test_event_store_persists_hash_chain_manifest_budget_and_replay(tmp_path: Pa
         "task_spec",
     }
     assert state.evaluation_outcome == "passed"
+
+
+def test_event_store_orders_and_replays_optional_evaluator_transcripts(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "runs.db"
+    with EventStore(database, clock=DeterministicClock(started_at=START)) as store:
+        events = populate_run(store, "run-a", evaluator_transcripts=True)
+        manifest = store.load_manifest("run-a")
+
+    recorded = [event for event in events if event.event_type == "artifact.recorded"]
+    assert [event.payload["name"] for event in recorded] == [
+        "task_spec",
+        "patch",
+        "evaluation_stdout",
+        "evaluation_stderr",
+        "evaluation_candidate_stdout",
+        "evaluation_scorer_stdout",
+        "evaluation",
+    ]
+    replay = replay_events(events, require_terminal=True)
+    assert replay.artifacts["evaluation_candidate_stdout"] == "0" * 64
+    assert replay.artifacts["evaluation_scorer_stdout"] == "1" * 64
+    assert set(manifest.artifacts) == set(replay.artifacts)
+
+    stderr_index = next(
+        index
+        for index, event in enumerate(events)
+        if event.event_type == "artifact.recorded"
+        and event.payload.get("name") == "evaluation_stderr"
+    )
+    through_stderr = events[: stderr_index + 1]
+    scorer_event = next(
+        event for event in recorded if event.payload.get("name") == "evaluation_scorer_stdout"
+    )
+    scorer_first = chained_event(
+        through_stderr,
+        "artifact.recorded",
+        dict(scorer_event.payload),
+    )
+    with pytest.raises(ReplayIntegrityError, match="out of phase"):
+        replay_events([*through_stderr, scorer_first])
 
 
 def test_event_store_rejects_uncoordinated_low_level_phase_events(tmp_path: Path) -> None:

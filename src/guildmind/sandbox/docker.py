@@ -5,11 +5,12 @@ from __future__ import annotations
 import json
 import os
 import re
+import secrets
 import selectors
 import stat
 import subprocess
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import BinaryIO, Protocol, cast
@@ -24,6 +25,7 @@ from guildmind.sandbox.base import (
 
 _CONTAINER_ID = re.compile(r"^[0-9a-f]{12,64}$")
 _IMAGE_ID = re.compile(r"^sha256:[0-9a-f]{64}$")
+_CONTAINER_NAME_SUFFIX = re.compile(r"^[0-9a-f]{12}$")
 _CONTROL_TIMEOUT_SECONDS = 5.0
 _MAX_DIAGNOSTIC_BYTES = 4_096
 _CONTAINER_UID = 65_532
@@ -209,6 +211,7 @@ class DockerSandbox:
         host_policy: DockerHostPolicy | None = None,
         docker_executable: str = "docker",
         command_runner: _DockerCommandRunner | None = None,
+        container_name_suffix_factory: Callable[[], str] | None = None,
     ) -> None:
         if not docker_executable or "\x00" in docker_executable:
             raise ValueError("docker_executable must be a non-empty command")
@@ -216,6 +219,9 @@ class DockerSandbox:
         self.docker_executable = docker_executable
         self._runner: _DockerCommandRunner = command_runner or cast(
             _DockerCommandRunner, _SubprocessDockerCommandRunner()
+        )
+        self._container_name_suffix_factory = (
+            container_name_suffix_factory or _random_container_name_suffix
         )
 
     def assess_host(self) -> DockerHostAssessment:
@@ -237,7 +243,11 @@ class DockerSandbox:
         image = self._inspect_image(request.image)
         self._validate_mount_sources(request)
 
-        create_argv = self._create_argv(request)
+        suffix = self._container_name_suffix_factory()
+        if _CONTAINER_NAME_SUFFIX.fullmatch(suffix) is None:
+            raise SandboxUnavailableError("container name suffix factory returned an invalid value")
+        container_name = _container_name(request.execution_id, suffix)
+        create_argv = self._create_argv(request, container_name=container_name)
         try:
             created = self._runner.run(create_argv, timeout=_CONTROL_TIMEOUT_SECONDS)
         except (OSError, subprocess.TimeoutExpired) as error:
@@ -254,11 +264,7 @@ class DockerSandbox:
             )
 
         container_id = created.stdout.decode("ascii", errors="replace").strip()
-        cleanup_target = (
-            container_id
-            if _CONTAINER_ID.fullmatch(container_id)
-            else _container_name(request.execution_id)
-        )
+        cleanup_target = container_id if _CONTAINER_ID.fullmatch(container_id) else container_name
         if _CONTAINER_ID.fullmatch(container_id) is None:
             cleanup = self._remove_container(cleanup_target)
             diagnostic = "docker create returned a malformed container ID"
@@ -337,12 +343,12 @@ class DockerSandbox:
                     f"sandbox mount source is not a regular file or directory: {mount.source}"
                 )
 
-    def _create_argv(self, request: SandboxRequest) -> list[str]:
+    def _create_argv(self, request: SandboxRequest, *, container_name: str) -> list[str]:
         limits = request.limits
         argv = [
             self.docker_executable,
             "create",
-            f"--name={_container_name(request.execution_id)}",
+            f"--name={container_name}",
             "--pull=never",
             "--label=guildmind.managed=true",
             f"--label=guildmind.execution_id={request.execution_id}",
@@ -615,8 +621,12 @@ def _diagnostic(completed: subprocess.CompletedProcess[bytes]) -> str:
     return rendered or f"Docker command exited {completed.returncode}"
 
 
-def _container_name(execution_id: str) -> str:
-    return f"guildmind-{execution_id}"
+def _random_container_name_suffix() -> str:
+    return secrets.token_hex(6)
+
+
+def _container_name(execution_id: str, suffix: str) -> str:
+    return f"guildmind-{execution_id}-{suffix}"
 
 
 def _format_number(value: float) -> str:

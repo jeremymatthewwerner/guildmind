@@ -96,20 +96,23 @@ Guildmind now has its first deterministic local vertical slice. It can:
 - store immutable artifacts by content hash and hash-link events in a single-writer SQLite ledger;
 - run a scripted fake model against a repository-owned coding fixture;
 - validate and apply a constrained patch to a copied workspace;
-- execute visible and out-of-workspace hidden tests in a separate fresh copy; and
+- execute trusted local tests or a two-phase black-box container evaluation; and
 - verify the event chain, reconstruct terminal state, and compare normalized semantic digests across runs.
 
-The current Stage 1 hardening checkpoint adds a restricted Docker invocation contract, a pinned image-owned container evaluator, and crash recovery that closes an abandoned nonterminal run with explicit terminal evidence. These are development controls and contract tests, not a claim that hostile-code containment has passed.
+The current Stage 1 hardening checkpoint adds a restricted Docker invocation contract, a pinned image-owned two-phase evaluator, and crash recovery that closes an abandoned nonterminal run with explicit terminal evidence. These are development controls and contract tests, not a claim that hostile-code containment has passed.
 
 The implemented path is:
 
 ```text
 fixture task → fake model → validated patch → copied workspace
-             → local or restricted development evaluator
+             → local evaluator, or candidate container → opaque response
+                                  → isolated trusted scorer
              → artifacts + transactional event ledger → replay/recovery
 ```
 
-This is engineering infrastructure for trusted repository-owned fixtures, not yet a hostile-code sandbox. The development evaluator image rebuilt reproducibly and completed the gold fixture under the declared restrictions on Docker Desktop, but that rootful ARM Linux virtual machine is not the required rootless x86_64 reference host. More importantly, the current Python harness imports candidate code into the same interpreter as `unittest`: the checked-in adversarial fixture can monkeypatch the runner and forge a pass. A strict expected-failure test preserves that known defect. External tasks and real model-generated commands remain blocked until the evaluator trust boundary is redesigned, the reference-host adversarial suite passes, and the 99% normal-fixture reliability campaign passes. The [Stage 1 hardening gate report](docs/reviews/2026-08-01-stage-1-hardening-gate.md) records the exact evidence and retains a **NOT PASSED** verdict.
+This is engineering infrastructure for trusted repository-owned fixtures, not yet a hostile-code sandbox. Evaluator v2 closes the demonstrated same-interpreter false pass for the first fixture: candidate code receives only a patched workspace and expected-value-free JSON challenge, while a fresh scorer container receives the sealed oracle and bounded candidate response but no candidate workspace. Manifest, source, test, and oracle bytes are frozen before model dispatch; the trusted completion binds that frozen identity, and exact bounded candidate/scorer transcripts survive as content-addressed evidence. The former `unittest` tampering case, a grader-path probe, a forged completion marker, and an empty-response attack now fail under live development evaluation.
+
+That boundary is deliberately narrow. It covers JSON-callable micro-fixtures, candidate code necessarily observes the call inputs, and it is not a general pytest or arbitrary-repository evaluator. The reproducibly built image ran successfully under the declared restrictions on Docker Desktop, but that rootful ARM Linux virtual machine is not the required rootless x86_64 reference host. External tasks and real model-generated commands remain blocked until the checked-in gold/attack matrix passes on that reference host and the complete negative/resource corpus, process-kill recovery campaign, and 99% normal-fixture reliability campaign are complete. The [Stage 1 hardening gate report](docs/reviews/2026-08-01-stage-1-hardening-gate.md) records the exact evidence and retains a **NOT PASSED** verdict; [ADR 0004](docs/decisions/0004-two-phase-python-call-evaluator.md) records the v2 boundary and its limits.
 
 Experiment 0001 also remains a draft until its worker model, spend ceilings, minimum relevant effect, and publication level are approved. Until both that Stage 0 approval and the Stage 1 boundary gate exist, the next work remains fixture hardening—not provider-backed pilots, baselines, genomes, or search.
 

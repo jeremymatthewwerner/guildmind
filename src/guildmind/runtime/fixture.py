@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+from dataclasses import replace
 from pathlib import Path
 
 from pydantic import JsonValue, TypeAdapter
@@ -15,7 +16,7 @@ from guildmind.domain import (
     canonical_sha256,
     sha256_bytes,
 )
-from guildmind.evaluation import LocalEvaluationSpec, load_fixture
+from guildmind.evaluation import LocalEvaluationSpec, load_fixture, load_python_call_bundle
 from guildmind.storage import FileArtifactStore
 
 
@@ -27,18 +28,28 @@ def materialize_fixture_task(
     environment_digest: str,
 ) -> tuple[TaskSpec, LocalEvaluationSpec, str]:
     local_spec = load_fixture(fixture_root)
-    raw_manifest = TypeAdapter(dict[str, JsonValue]).validate_python(
-        json.loads((fixture_root / "task.json").read_text(encoding="utf-8"))
-    )
+    manifest_bytes = local_spec.fixture_manifest_bytes
+    if manifest_bytes is None:
+        manifest_bytes = (fixture_root / "task.json").read_bytes()
+    raw_manifest = TypeAdapter(dict[str, JsonValue]).validate_python(json.loads(manifest_bytes))
     problem_statement = raw_manifest.get("problem_statement")
     if not isinstance(problem_statement, str) or not problem_statement.strip():
         raise ValueError("fixture problem_statement must be a non-empty string")
 
-    snapshot = _canonical_tree_snapshot(local_spec.pristine_workspace)
-    repository_snapshot = artifact_store.put_text(
-        canonical_json(snapshot),
+    snapshot_bytes = local_spec.pristine_workspace_snapshot_bytes
+    if snapshot_bytes is None:
+        snapshot_bytes = canonical_json(
+            _canonical_tree_snapshot(local_spec.pristine_workspace)
+        ).encode("utf-8")
+    repository_snapshot = artifact_store.put_bytes(
+        snapshot_bytes,
         media_type="application/vnd.guildmind.tree+json",
     )
+    if (
+        local_spec.pristine_workspace_sha256 is not None
+        and local_spec.pristine_workspace_sha256 != repository_snapshot.sha256
+    ):
+        raise ValueError("frozen workspace identity does not match its snapshot bytes")
     problem_artifact = artifact_store.put_text(problem_statement)
 
     visible_tests: list[ArtifactRef] = []
@@ -50,18 +61,27 @@ def materialize_fixture_task(
         if not isinstance(item, str):
             raise ValueError("visible_test_files must be a string list")
         visible_paths.append(item)
-    for relative in visible_paths:
-        visible_path = (fixture_root / relative).resolve()
-        if not visible_path.is_relative_to(local_spec.pristine_workspace.resolve()):
-            raise ValueError("visible tests must be inside the worker workspace")
-        visible_tests.append(
-            artifact_store.put_bytes(visible_path.read_bytes(), media_type="text/x-python")
-        )
+    if len(visible_paths) != len(local_spec.visible_test_files):
+        raise ValueError("visible tests do not match the frozen fixture specification")
+    for visible_bytes in local_spec.visible_test_bytes:
+        visible_tests.append(artifact_store.put_bytes(visible_bytes, media_type="text/x-python"))
 
     hidden_hashes: list[JsonValue] = [
-        sha256_bytes(path.read_bytes()) for path in local_spec.hidden_test_files
+        sha256_bytes(hidden_bytes) for hidden_bytes in local_spec.hidden_test_bytes
     ]
+    protocol_identity: dict[str, JsonValue] | None = None
+    if local_spec.python_call_protocol is not None:
+        bundle = load_python_call_bundle(
+            local_spec.python_call_protocol,
+            expected_case_count=local_spec.expected_test_count,
+        )
+        protocol_identity = {
+            "challenge_sha256": bundle.challenge_sha256,
+            "oracle_sha256": bundle.oracle_sha256,
+            "protocol": "python-call-v1",
+        }
     identity: dict[str, JsonValue] = {
+        "evaluation_protocol": protocol_identity,
         "fixture_manifest": raw_manifest,
         "hidden_test_hashes": hidden_hashes,
         "repository_snapshot_sha256": repository_snapshot.sha256,
@@ -82,6 +102,11 @@ def materialize_fixture_task(
             "evaluator_version": evaluator_version,
             "network_required": False,
         },
+    )
+    local_spec = replace(
+        local_spec,
+        pristine_workspace_sha256=repository_snapshot.sha256,
+        task_content_hash=task_hash,
     )
     return task, local_spec, problem_statement
 
