@@ -6,6 +6,7 @@ import json
 import sqlite3
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -52,10 +53,29 @@ _MANIFEST_MUTABLE_FIELDS = {
     "status",
     "terminal_reason",
 }
+_CONNECTION_TIMEOUT_SECONDS = 5.0
+_BUSY_TIMEOUT_MILLISECONDS = 5_000
+_EXPECTED_CONNECTION_SETTINGS: tuple[tuple[str, str | int], ...] = (
+    ("foreign_keys", 1),
+    ("journal_mode", "wal"),
+    ("synchronous", 2),
+    ("busy_timeout", _BUSY_TIMEOUT_MILLISECONDS),
+)
 
 
 class StoreIntegrityError(RuntimeError):
     """Raised when persisted state violates its recorded identity or ordering."""
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedRunRoot:
+    """Validated manifest and ledger-head identity for one run."""
+
+    manifest: RunManifest
+    manifest_revision: int
+    manifest_sha256: str
+    event_count: int
+    head_event_sha256: str
 
 
 class EventStore:
@@ -65,12 +85,18 @@ class EventStore:
         self.path = path.resolve()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._clock = clock or SystemClock()
-        self._connection = sqlite3.connect(self.path)
+        self._connection = sqlite3.connect(
+            self.path,
+            timeout=_CONNECTION_TIMEOUT_SECONDS,
+            isolation_level=None,
+        )
         self._connection.row_factory = sqlite3.Row
-        self._connection.execute("PRAGMA foreign_keys = ON")
-        self._connection.execute("PRAGMA journal_mode = WAL")
-        self._connection.execute("PRAGMA synchronous = FULL")
-        self._initialize_schema()
+        try:
+            self._configure_connection()
+            self._initialize_schema()
+        except BaseException:
+            self._connection.close()
+            raise
 
     def close(self) -> None:
         self._connection.close()
@@ -544,6 +570,65 @@ class EventStore:
         events = self.list_events(run_id)
         return "".join(f"{canonical_json(event)}\n" for event in events)
 
+    def verify_integrity(self) -> tuple[VerifiedRunRoot, ...]:
+        """Validate one consistent read-only snapshot of the complete ledger.
+
+        The returned roots are ordered by run ID. Each root binds the validated
+        current manifest (and therefore its artifact references) to the exact
+        manifest revision and hash-chained event head observed in this snapshot.
+        """
+
+        self._verify_connection_settings()
+        if self._connection.in_transaction:
+            raise StoreIntegrityError("integrity verification requires an idle connection")
+
+        try:
+            self._connection.execute("BEGIN")
+            self._verify_sqlite_integrity_locked()
+            rows = self._connection.execute(
+                "SELECT run_id, manifest_revision FROM runs ORDER BY run_id ASC"
+            ).fetchall()
+            roots: list[VerifiedRunRoot] = []
+            for row in rows:
+                run_id = str(row["run_id"])
+                manifest_revision = int(row["manifest_revision"])
+                manifest = self._load_manifest_locked(run_id)
+                self._validate_manifest_history_locked(
+                    run_id,
+                    current=manifest,
+                    current_revision=manifest_revision,
+                )
+                state = self._validated_state_locked(run_id, manifest)
+                events = self._list_events_locked(run_id)
+                if manifest.status.is_terminal:
+                    try:
+                        replay_events(events, require_terminal=True)
+                    except ReplayIntegrityError as error:
+                        raise StoreIntegrityError(
+                            f"incomplete terminal run {run_id}: {error}"
+                        ) from error
+                    if state.terminal_reason != manifest.terminal_reason:
+                        raise StoreIntegrityError(
+                            f"manifest terminal reason disagrees with replay for run {run_id}"
+                        )
+                roots.append(
+                    VerifiedRunRoot(
+                        manifest=manifest,
+                        manifest_revision=manifest_revision,
+                        manifest_sha256=canonical_sha256(manifest),
+                        event_count=len(events),
+                        head_event_sha256=events[-1].content_hash(),
+                    )
+                )
+            return tuple(roots)
+        except StoreIntegrityError:
+            raise
+        except (KeyError, ValueError, sqlite3.DatabaseError) as error:
+            raise StoreIntegrityError("database integrity validation failed") from error
+        finally:
+            if self._connection.in_transaction:
+                self._connection.rollback()
+
     def _append_locked(
         self,
         *,
@@ -678,6 +763,59 @@ class EventStore:
             raise StoreIntegrityError(f"manifest revision mismatch for run {run_id}")
         return manifest
 
+    def _validate_manifest_history_locked(
+        self,
+        run_id: str,
+        *,
+        current: RunManifest,
+        current_revision: int,
+    ) -> None:
+        rows = self._connection.execute(
+            """
+            SELECT revision, manifest_json, manifest_sha256
+            FROM run_manifests WHERE run_id = ? ORDER BY revision ASC
+            """,
+            (run_id,),
+        ).fetchall()
+        revisions = tuple(int(row["revision"]) for row in rows)
+        history_is_contiguous = (
+            current_revision >= 0
+            and len(revisions) == current_revision + 1
+            and all(revision == expected for expected, revision in enumerate(revisions))
+        )
+        if not history_is_contiguous:
+            raise StoreIntegrityError(f"non-contiguous manifest history for run {run_id}")
+
+        previous: RunManifest | None = None
+        for row in rows:
+            revision = int(row["revision"])
+            raw_manifest = str(row["manifest_json"])
+            manifest = RunManifest.model_validate(json.loads(raw_manifest))
+            if manifest.run_id != run_id:
+                raise StoreIntegrityError(
+                    f"manifest history run ID mismatch for run {run_id} at revision {revision}"
+                )
+            if raw_manifest != canonical_json(manifest):
+                raise StoreIntegrityError(
+                    f"non-canonical manifest history for run {run_id} at revision {revision}"
+                )
+            if row["manifest_sha256"] != canonical_sha256(manifest):
+                raise StoreIntegrityError(
+                    f"manifest history hash mismatch for run {run_id} at revision {revision}"
+                )
+            if previous is not None:
+                try:
+                    _validate_manifest_transition(previous, manifest)
+                except (StoreIntegrityError, ValueError) as error:
+                    raise StoreIntegrityError(
+                        f"invalid manifest history transition for run {run_id} "
+                        f"at revision {revision}"
+                    ) from error
+            previous = manifest
+
+        if previous != current:
+            raise StoreIntegrityError(f"manifest history head mismatch for run {run_id}")
+
     def _load_budget_locked(self, run_id: str) -> tuple[BudgetUsage, BudgetUsage]:
         row = self._connection.execute(
             """
@@ -786,6 +924,47 @@ class EventStore:
         row = self._connection.execute("SELECT 1 FROM runs WHERE run_id = ?", (run_id,)).fetchone()
         if row is None:
             raise KeyError(f"unknown run: {run_id}")
+
+    def _configure_connection(self) -> None:
+        self._connection.execute("PRAGMA foreign_keys = ON")
+        self._connection.execute("PRAGMA journal_mode = WAL")
+        self._connection.execute("PRAGMA synchronous = FULL")
+        self._connection.execute(f"PRAGMA busy_timeout = {_BUSY_TIMEOUT_MILLISECONDS}")
+        self._verify_connection_settings()
+
+    def _verify_connection_settings(self) -> None:
+        for pragma, expected in _EXPECTED_CONNECTION_SETTINGS:
+            try:
+                row = self._connection.execute(f"PRAGMA {pragma}").fetchone()
+            except sqlite3.DatabaseError as error:
+                raise StoreIntegrityError(
+                    f"could not query SQLite connection setting {pragma}"
+                ) from error
+            if row is None:
+                raise StoreIntegrityError(f"SQLite connection setting {pragma} has no value")
+            actual = row[0]
+            normalized = str(actual).lower() if isinstance(expected, str) else actual
+            if normalized != expected:
+                raise StoreIntegrityError(
+                    f"SQLite connection setting {pragma} is {actual!r}; expected {expected!r}"
+                )
+
+    def _verify_sqlite_integrity_locked(self) -> None:
+        try:
+            quick_check = tuple(
+                str(row[0]) for row in self._connection.execute("PRAGMA quick_check").fetchall()
+            )
+            foreign_key_violations = self._connection.execute("PRAGMA foreign_key_check").fetchall()
+        except sqlite3.DatabaseError as error:
+            raise StoreIntegrityError("SQLite structural integrity check failed") from error
+        if quick_check != ("ok",):
+            raise StoreIntegrityError(
+                f"SQLite quick_check failed with {len(quick_check)} finding(s)"
+            )
+        if foreign_key_violations:
+            raise StoreIntegrityError(
+                f"SQLite foreign_key_check failed with {len(foreign_key_violations)} violation(s)"
+            )
 
     @contextmanager
     def _transaction(self) -> Iterator[None]:

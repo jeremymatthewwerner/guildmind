@@ -21,6 +21,7 @@ from guildmind.runtime import (
     semantic_digest,
 )
 from guildmind.storage import EventStore, StoreIntegrityError
+from guildmind.storage.events import VerifiedRunRoot
 
 START = datetime(2026, 7, 31, 9, 0, tzinfo=UTC)
 
@@ -151,6 +152,130 @@ def test_event_store_persists_hash_chain_manifest_budget_and_replay(tmp_path: Pa
         "task_spec",
     }
     assert state.evaluation_outcome == "passed"
+
+
+def test_event_store_verifies_connection_settings_and_returns_stable_roots(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "runs.db"
+    with EventStore(database, clock=DeterministicClock(started_at=START)) as store:
+        run_b_events = populate_run(store, "run-b")
+        run_a_event = store.create_run(pending_manifest("run-a"))
+
+        assert store._connection.isolation_level is None
+        assert store._connection.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+        assert store._connection.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+        assert store._connection.execute("PRAGMA synchronous").fetchone()[0] == 2
+        assert store._connection.execute("PRAGMA busy_timeout").fetchone()[0] == 5_000
+
+        statements: list[str] = []
+        store._connection.set_trace_callback(statements.append)
+        changes_before = store._connection.total_changes
+        roots = store.verify_integrity()
+        store._connection.set_trace_callback(None)
+
+        assert roots == store.verify_integrity()
+        assert store._connection.total_changes == changes_before
+
+    assert tuple(root.manifest.run_id for root in roots) == ("run-a", "run-b")
+    assert all(isinstance(root, VerifiedRunRoot) for root in roots)
+    assert roots[0].manifest_revision == 0
+    assert roots[0].manifest_sha256 == canonical_sha256(roots[0].manifest)
+    assert roots[0].event_count == 1
+    assert roots[0].head_event_sha256 == run_a_event.content_hash()
+    assert roots[1].manifest_revision == 4
+    assert roots[1].manifest_sha256 == canonical_sha256(roots[1].manifest)
+    assert roots[1].event_count == len(run_b_events)
+    assert roots[1].head_event_sha256 == run_b_events[-1].content_hash()
+    assert "PRAGMA quick_check" in statements
+    assert "PRAGMA foreign_key_check" in statements
+
+
+def test_explicit_transaction_policy_commits_and_rolls_back_lifecycle_writes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database = tmp_path / "runs.db"
+    with EventStore(database, clock=DeterministicClock(started_at=START)) as store:
+        append_event = store._append_locked
+
+        def fail_creation_event(**_: object) -> EventRecord:
+            raise RuntimeError("simulated lifecycle failure")
+
+        monkeypatch.setattr(store, "_append_locked", fail_creation_event)
+        with pytest.raises(RuntimeError, match="simulated lifecycle failure"):
+            store.create_run(pending_manifest("run-rolled-back"))
+        assert store.list_run_ids() == ()
+
+        monkeypatch.setattr(store, "_append_locked", append_event)
+        committed_event = store.create_run(pending_manifest("run-committed"))
+        assert committed_event.event_type == "run.created"
+
+    with EventStore(database, clock=DeterministicClock(started_at=START)) as store:
+        assert store.list_run_ids() == ("run-committed",)
+        assert store.load_manifest("run-committed") == pending_manifest("run-committed")
+        assert store.list_events("run-committed") == [committed_event]
+
+
+def test_verify_integrity_returns_an_empty_snapshot_for_an_empty_database(
+    tmp_path: Path,
+) -> None:
+    with EventStore(tmp_path / "runs.db") as store:
+        assert store.verify_integrity() == ()
+
+
+def test_verify_integrity_is_read_only_for_outstanding_external_work(tmp_path: Path) -> None:
+    database = tmp_path / "runs.db"
+    maximum = BudgetUsage(output_tokens=20, model_calls=1)
+    with EventStore(database, clock=DeterministicClock(started_at=START)) as store:
+        running_run(store, "run-a")
+        store.record_artifact("run-a", "task_spec", artifact("a" * 64))
+        store.start_model_request(
+            run_id="run-a",
+            request_id="model-request-0001",
+            maximum=maximum,
+            budget_used=BudgetUsage(),
+            budget_reserved=maximum,
+        )
+        events_before = store.list_events("run-a")
+        manifest_before = store.load_manifest("run-a")
+        budget_before = store.load_budget_state("run-a")
+        changes_before = store._connection.total_changes
+
+        roots = store.verify_integrity()
+
+        assert roots[0].manifest == manifest_before
+        assert roots[0].manifest.status is RunStatus.RUNNING
+        assert store.list_events("run-a") == events_before
+        assert store.load_manifest("run-a") == manifest_before
+        assert store.load_budget_state("run-a") == budget_before
+        assert store._connection.total_changes == changes_before
+        assert "model.request_ambiguous" not in {
+            event.event_type for event in store.list_events("run-a")
+        }
+        assert "run.terminal" not in {event.event_type for event in store.list_events("run-a")}
+
+
+@pytest.mark.parametrize(
+    ("pragma", "value"),
+    [
+        ("foreign_keys", "OFF"),
+        ("journal_mode", "DELETE"),
+        ("synchronous", "NORMAL"),
+        ("busy_timeout", "1"),
+    ],
+)
+def test_verify_integrity_rejects_connection_setting_drift(
+    tmp_path: Path,
+    pragma: str,
+    value: str,
+) -> None:
+    database = tmp_path / "runs.db"
+    with EventStore(database, clock=DeterministicClock(started_at=START)) as store:
+        store._connection.execute(f"PRAGMA {pragma} = {value}")
+
+        with pytest.raises(StoreIntegrityError, match=pragma):
+            store.verify_integrity()
 
 
 def test_event_store_orders_and_replays_optional_evaluator_transcripts(
@@ -364,6 +489,113 @@ def test_event_store_detects_budget_usage_index_tampering(tmp_path: Path) -> Non
         pytest.raises(StoreIntegrityError, match="budget index disagrees"),
     ):
         store.list_events("run-a")
+
+
+@pytest.mark.parametrize(
+    ("statement", "parameters", "message"),
+    [
+        (
+            "UPDATE runs SET status = ? WHERE run_id = ?",
+            (RunStatus.RUNNING.value, "run-a"),
+            "status index mismatch",
+        ),
+        (
+            "UPDATE events SET event_hash = ? WHERE run_id = ? AND sequence = 0",
+            ("0" * 64, "run-a"),
+            "event hash mismatch",
+        ),
+        (
+            "UPDATE budget_state SET used_json = ? WHERE run_id = ?",
+            (BudgetUsage(output_tokens=9, model_calls=1).model_dump_json(), "run-a"),
+            "budget index disagrees",
+        ),
+    ],
+    ids=("run-index", "event-chain", "budget-index"),
+)
+def test_verify_integrity_rejects_corrupt_current_run_state(
+    tmp_path: Path,
+    statement: str,
+    parameters: tuple[object, ...],
+    message: str,
+) -> None:
+    database = tmp_path / "runs.db"
+    with EventStore(database, clock=DeterministicClock(started_at=START)) as store:
+        populate_run(store, "run-a")
+    with sqlite3.connect(database) as connection:
+        connection.execute(statement, parameters)
+        connection.commit()
+
+    with (
+        EventStore(database, clock=DeterministicClock(started_at=START)) as store,
+        pytest.raises(StoreIntegrityError, match=message),
+    ):
+        store.verify_integrity()
+
+
+def test_verify_integrity_rejects_foreign_key_violations(tmp_path: Path) -> None:
+    database = tmp_path / "runs.db"
+    with EventStore(database, clock=DeterministicClock(started_at=START)) as store:
+        store.create_run(pending_manifest("run-a"))
+    with sqlite3.connect(database) as connection:
+        connection.execute("PRAGMA foreign_keys = OFF")
+        connection.execute(
+            """
+            INSERT INTO budget_state(run_id, limits_json, used_json, reserved_json)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                "orphan-run",
+                BudgetLimits(max_model_calls=1).model_dump_json(),
+                BudgetUsage().model_dump_json(),
+                BudgetUsage().model_dump_json(),
+            ),
+        )
+        connection.commit()
+
+    with (
+        EventStore(database, clock=DeterministicClock(started_at=START)) as store,
+        pytest.raises(StoreIntegrityError, match="foreign_key_check"),
+    ):
+        store.verify_integrity()
+
+
+@pytest.mark.parametrize(
+    ("statement", "parameters", "message"),
+    [
+        (
+            "DELETE FROM run_manifests WHERE run_id = ? AND revision = 1",
+            ("run-a",),
+            "non-contiguous manifest history",
+        ),
+        (
+            """
+            UPDATE run_manifests SET manifest_sha256 = ?
+            WHERE run_id = ? AND revision = 0
+            """,
+            ("0" * 64, "run-a"),
+            "manifest history hash mismatch",
+        ),
+    ],
+    ids=("missing-revision", "historical-hash"),
+)
+def test_verify_integrity_validates_the_complete_manifest_history(
+    tmp_path: Path,
+    statement: str,
+    parameters: tuple[object, ...],
+    message: str,
+) -> None:
+    database = tmp_path / "runs.db"
+    with EventStore(database, clock=DeterministicClock(started_at=START)) as store:
+        populate_run(store, "run-a")
+    with sqlite3.connect(database) as connection:
+        connection.execute(statement, parameters)
+        connection.commit()
+
+    with (
+        EventStore(database, clock=DeterministicClock(started_at=START)) as store,
+        pytest.raises(StoreIntegrityError, match=message),
+    ):
+        store.verify_integrity()
 
 
 def test_explicit_recovery_charges_ambiguous_request_and_is_idempotent(
