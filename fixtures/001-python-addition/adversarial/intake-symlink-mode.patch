@@ -1,0 +1,7 @@
+diff --git a/addition.py b/addition.py
+index 1111111..2222222 120000
+--- a/addition.py
++++ b/addition.py
+@@ -1 +1 @@
+-"""Tiny deterministic fixture used by the local evaluator smoke test."""
++/etc/passwd

@@ -122,6 +122,7 @@ class LocalEvaluationSpec:
     timeout_seconds: float = 5.0
     max_output_bytes: int = 8_192
     max_patch_bytes: int = 65_536
+    max_patch_files: int = 8
     expected_test_count: int = 1
     python_call_protocol: PythonCallProtocol | None = None
     pristine_workspace_sha256: str | None = None
@@ -152,6 +153,8 @@ class LocalEvaluationSpec:
             raise FixtureConfigurationError("max_output_bytes must be positive")
         if self.max_patch_bytes <= 0:
             raise FixtureConfigurationError("max_patch_bytes must be positive")
+        if self.max_patch_files <= 0:
+            raise FixtureConfigurationError("max_patch_files must be positive")
         if self.expected_test_count <= 0:
             raise FixtureConfigurationError("expected_test_count must be positive")
         if (
@@ -165,6 +168,7 @@ class LocalEvaluationSpec:
             PatchPolicy(
                 allowed_paths=self.allowed_patch_paths,
                 max_patch_bytes=self.max_patch_bytes,
+                max_files=self.max_patch_files,
             )
         except ValueError as error:
             raise FixtureConfigurationError(f"invalid patch policy: {error}") from error
@@ -311,6 +315,7 @@ class LocalEvaluationSpec:
             timeout_seconds=_optional_positive_number(raw, "timeout_seconds", 5.0),
             max_output_bytes=_optional_positive_integer(raw, "max_output_bytes", 8_192),
             max_patch_bytes=_optional_positive_integer(raw, "max_patch_bytes", 65_536),
+            max_patch_files=_optional_positive_integer(raw, "max_patch_files", 8),
             expected_test_count=expected_test_count,
             python_call_protocol=python_call_protocol,
             pristine_workspace_sha256=frozen_workspace.snapshot_sha256,
@@ -432,6 +437,7 @@ class LocalEvaluator:
         policy = PatchPolicy(
             allowed_paths=spec.allowed_patch_paths,
             max_patch_bytes=spec.max_patch_bytes,
+            max_files=spec.max_patch_files,
         )
         try:
             with tempfile.TemporaryDirectory(prefix="guildmind-evaluation-") as temporary:
@@ -722,7 +728,7 @@ def _freeze_workspace(source: Path) -> _FrozenWorkspace:
             raise FixtureConfigurationError(
                 f"cannot inspect fixture workspace entry: {path}"
             ) from error
-        if path.name == ".git":
+        if any(part.casefold() == ".git" for part in Path(relative).parts):
             raise FixtureConfigurationError("fixture workspace contains forbidden Git metadata")
         if stat.S_ISLNK(mode):
             raise FixtureConfigurationError(f"fixture workspace contains a symlink: {path}")

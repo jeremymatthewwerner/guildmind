@@ -28,6 +28,15 @@ def test_checked_in_adversarial_corpus_is_complete_and_content_addressed() -> No
         "functional-no-op",
         "functional-visible-only",
         "functional-wrong-operation",
+        "intake-absolute-path",
+        "intake-binary",
+        "intake-container-target",
+        "intake-file-count",
+        "intake-grader-path",
+        "intake-oversize",
+        "intake-submodule-mode",
+        "intake-symlink-mode",
+        "intake-traversal",
         "resource-memory-oom",
         "resource-output-bomb",
         "resource-timeout",
@@ -49,6 +58,15 @@ def test_checked_in_adversarial_corpus_is_complete_and_content_addressed() -> No
     assert memory_case.expected.phase == "candidate"
     assert not memory_case.expected.output_truncated
     assert memory_case.expected.scorer_classification is None
+
+    intake_cases = [case for case in corpus.cases if case.expected.phase == "intake"]
+    assert len(intake_cases) == 9
+    assert all(
+        case.expected.evaluation_status is EvaluationStatus.INVALID_PATCH
+        and case.expected.scorer_classification is None
+        and not case.expected.output_truncated
+        for case in intake_cases
+    )
 
 
 def test_adversarial_corpus_rejects_patch_digest_drift(tmp_path: Path) -> None:
@@ -94,4 +112,17 @@ def test_adversarial_corpus_rejects_inconsistent_phase_expectations(tmp_path: Pa
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
     with pytest.raises(FixtureConfigurationError, match="scorer-phase"):
+        load_adversarial_corpus(manifest_path)
+
+
+def test_adversarial_corpus_rejects_inconsistent_intake_expectations(tmp_path: Path) -> None:
+    corpus_root = tmp_path / "adversarial"
+    shutil.copytree(_CORPUS_ROOT, corpus_root)
+    manifest_path = corpus_root / "corpus.json"
+    manifest = json.loads(manifest_path.read_bytes())
+    intake_case = next(case for case in manifest["cases"] if case["case_id"] == "intake-traversal")
+    intake_case["expected"]["evaluation_status"] = "tests_failed"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(FixtureConfigurationError, match="intake-phase"):
         load_adversarial_corpus(manifest_path)

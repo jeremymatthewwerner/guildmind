@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import os
 import shutil
 import subprocess
@@ -12,8 +13,13 @@ from pathlib import Path
 import pytest
 
 from guildmind.domain import ArtifactRef, RunStatus, TaskSpec, canonical_sha256, sha256_bytes
-from guildmind.evaluation import EvaluationStatus, LocalEvaluator, load_fixture
-from guildmind.sandbox import PatchPolicy, copy_and_apply_patch
+from guildmind.evaluation import (
+    EvaluationStatus,
+    FixtureConfigurationError,
+    LocalEvaluator,
+    load_fixture,
+)
+from guildmind.sandbox import PatchPolicy, PatchValidationError, copy_and_apply_patch
 
 _REPOSITORY_ROOT = Path(__file__).parents[2]
 _FIXTURE = _REPOSITORY_ROOT / "fixtures" / "001-python-addition"
@@ -259,6 +265,97 @@ def test_rejects_oversized_patches(tmp_path: Path) -> None:
     result = LocalEvaluator().evaluate(spec, patch)
 
     assert result.status is EvaluationStatus.INVALID_PATCH
+
+
+def test_rejects_compressed_patch_bytes_without_decompression(tmp_path: Path) -> None:
+    patch = tmp_path / "compressed.patch"
+    patch.write_bytes(gzip.compress((_FIXTURE / "solution.patch").read_bytes()))
+
+    result = LocalEvaluator().evaluate(load_fixture(_FIXTURE), patch)
+
+    assert result.status is EvaluationStatus.INVALID_PATCH
+
+
+def test_rejects_absurd_hunk_numbers_as_invalid_patch(tmp_path: Path) -> None:
+    patch = tmp_path / "huge-hunk-count.patch"
+    patch.write_text(
+        "diff --git a/addition.py b/addition.py\n"
+        "--- a/addition.py\n"
+        "+++ b/addition.py\n"
+        f"@@ -1,{'9' * 5000} +1 @@\n"
+        "-old\n"
+        "+new\n",
+        encoding="utf-8",
+    )
+    spec = replace(load_fixture(_FIXTURE), max_patch_bytes=8_192)
+
+    result = LocalEvaluator().evaluate(spec, patch)
+
+    assert result.status is EvaluationStatus.INVALID_PATCH
+    assert "hunk number is too large" in result.stderr
+
+
+def test_rejects_a_symlinked_patch_file(tmp_path: Path) -> None:
+    patch = tmp_path / "linked.patch"
+    patch.symlink_to(_FIXTURE / "solution.patch")
+
+    result = LocalEvaluator().evaluate(load_fixture(_FIXTURE), patch)
+
+    assert result.status is EvaluationStatus.INVALID_PATCH
+    assert "patch may not be a symlink" in result.stderr
+
+
+def test_rejects_patch_replaced_by_symlink_while_opening(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    patch = tmp_path / "racing.patch"
+    shutil.copyfile(_FIXTURE / "solution.patch", patch)
+    replacement = tmp_path / "replacement.patch"
+    shutil.copyfile(_FIXTURE / "solution.patch", replacement)
+    spec = load_fixture(_FIXTURE)
+    original_open = os.open
+    replaced = False
+
+    def replace_before_open(
+        path: os.PathLike[str] | str,
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
+        nonlocal replaced
+        if not replaced and Path(path) == patch:
+            replaced = True
+            patch.unlink()
+            patch.symlink_to(replacement)
+        return original_open(path, flags, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr(os, "open", replace_before_open)
+
+    result = LocalEvaluator().evaluate(spec, patch)
+
+    assert replaced
+    assert result.status is EvaluationStatus.INVALID_PATCH
+    assert (
+        "without following links" in result.stderr or "changed while being opened" in result.stderr
+    )
+
+
+def test_patch_policy_rejects_case_insensitive_nested_git_metadata() -> None:
+    with pytest.raises(PatchValidationError, match="Git metadata"):
+        PatchPolicy(allowed_paths=("src/.GIT/config",))
+
+
+def test_fixture_rejects_case_insensitive_git_metadata(tmp_path: Path) -> None:
+    fixture = tmp_path / "fixture"
+    shutil.copytree(_FIXTURE, fixture)
+    metadata = fixture / "workspace" / ".GIT"
+    metadata.mkdir()
+    (metadata / "config").write_text("[core]\n\trepositoryformatversion = 0\n")
+
+    with pytest.raises(FixtureConfigurationError, match="forbidden Git metadata"):
+        load_fixture(fixture)
 
 
 def test_rejects_patch_bytes_that_do_not_match_the_committed_identity() -> None:

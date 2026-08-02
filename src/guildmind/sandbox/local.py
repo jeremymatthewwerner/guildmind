@@ -27,6 +27,7 @@ _SAFE_PATH = re.compile(r"^[A-Za-z0-9._/-]+$")
 _NO_NEWLINE_MARKER = "\\ No newline at end of file"
 _DEFAULT_GIT_TIMEOUT_SECONDS = 5.0
 _MAX_GIT_DIAGNOSTIC_BYTES = 4_096
+_MAX_HUNK_NUMBER_DIGITS = 9
 
 
 class PatchValidationError(ValueError):
@@ -73,16 +74,7 @@ def validate_patch(
 ) -> ValidatedPatch:
     """Read and validate a narrowly formatted, text-only Git unified diff."""
 
-    _ensure_regular_file(patch_path, label="patch")
-    patch_size = patch_path.stat().st_size
-    if patch_size > policy.max_patch_bytes:
-        raise PatchValidationError(
-            f"patch is {patch_size} bytes; limit is {policy.max_patch_bytes} bytes"
-        )
-
-    data = patch_path.read_bytes()
-    if len(data) > policy.max_patch_bytes:
-        raise PatchValidationError("patch grew beyond its size limit while being read")
+    data = _read_regular_patch(patch_path, max_bytes=policy.max_patch_bytes)
     if b"\x00" in data:
         raise PatchValidationError("binary patches are not supported")
     try:
@@ -199,6 +191,10 @@ def _parse_hunk(lines: list[str], header_index: int) -> tuple[int, int]:
     if header is None:
         raise PatchValidationError(f"malformed hunk header at patch line {header_index + 1}")
 
+    for group_name in ("old_start", "old_count", "new_start", "new_count"):
+        value = header.group(group_name)
+        if value is not None and len(value) > _MAX_HUNK_NUMBER_DIGITS:
+            raise PatchValidationError(f"hunk number is too large at patch line {header_index + 1}")
     old_count = int(header.group("old_count") or "1")
     new_count = int(header.group("new_count") or "1")
     old_seen = 0
@@ -244,19 +240,59 @@ def _validate_relative_path(path: str) -> None:
     parts = path.split("/")
     if any(part in {"", ".", ".."} for part in parts):
         raise PatchValidationError(f"patch path contains traversal: {path!r}")
-    if parts[0] == ".git":
+    if any(part.casefold() == ".git" for part in parts):
         raise PatchValidationError("patches may not modify Git metadata")
 
 
-def _ensure_regular_file(path: Path, *, label: str) -> None:
+def _read_regular_patch(path: Path, *, max_bytes: int) -> bytes:
+    """Read one bounded regular file without following a swapped final symlink."""
+
     try:
-        mode = path.lstat().st_mode
-    except FileNotFoundError as error:
-        raise PatchValidationError(f"{label} does not exist: {path}") from error
-    if stat.S_ISLNK(mode):
-        raise PatchValidationError(f"{label} may not be a symlink: {path}")
-    if not stat.S_ISREG(mode):
-        raise PatchValidationError(f"{label} must be a regular file: {path}")
+        before = path.lstat()
+    except OSError as error:
+        raise PatchValidationError(f"cannot inspect patch: {path}") from error
+    if stat.S_ISLNK(before.st_mode):
+        raise PatchValidationError(f"patch may not be a symlink: {path}")
+    if not stat.S_ISREG(before.st_mode):
+        raise PatchValidationError(f"patch must be a regular file: {path}")
+    if before.st_size > max_bytes:
+        raise PatchValidationError(f"patch is {before.st_size} bytes; limit is {max_bytes} bytes")
+
+    flags = os.O_RDONLY
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        raise PatchValidationError(f"cannot open patch without following links: {path}") from error
+    try:
+        opened = os.fstat(descriptor)
+        if not stat.S_ISREG(opened.st_mode) or (opened.st_dev, opened.st_ino) != (
+            before.st_dev,
+            before.st_ino,
+        ):
+            raise PatchValidationError("patch changed while being opened")
+        with os.fdopen(descriptor, "rb", closefd=False) as stream:
+            data = stream.read(max_bytes + 1)
+            after = os.fstat(stream.fileno())
+    except OSError as error:
+        raise PatchValidationError(f"cannot read patch: {path}") from error
+    finally:
+        os.close(descriptor)
+
+    if len(data) > max_bytes:
+        raise PatchValidationError("patch grew beyond its size limit while being read")
+    if (after.st_dev, after.st_ino) != (opened.st_dev, opened.st_ino):
+        raise PatchValidationError("patch changed while being read")
+    if (after.st_size, after.st_mtime_ns, after.st_ctime_ns) != (
+        opened.st_size,
+        opened.st_mtime_ns,
+        opened.st_ctime_ns,
+    ):
+        raise PatchValidationError("patch changed while being read")
+    return data
 
 
 def _ensure_workspace_is_plain_tree(workspace: Path) -> None:

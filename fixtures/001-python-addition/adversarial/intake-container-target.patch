@@ -1,0 +1,6 @@
+diff --git a//inputs/grader/oracle.json b//inputs/grader/oracle.json
+--- a//inputs/grader/oracle.json
++++ b//inputs/grader/oracle.json
+@@ -1 +1 @@
+-{"sealed":true}
++{"sealed":false}

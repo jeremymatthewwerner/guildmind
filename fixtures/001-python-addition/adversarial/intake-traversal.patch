@@ -1,0 +1,6 @@
+diff --git a/../escape.py b/../escape.py
+--- a/../escape.py
++++ b/../escape.py
+@@ -1 +1 @@
+-safe = True
++safe = False

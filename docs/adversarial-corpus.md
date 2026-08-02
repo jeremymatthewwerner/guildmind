@@ -1,6 +1,6 @@
 # Adversarial evaluator corpus
 
-Guildmind keeps evaluator attacks as versioned fixture data, not only as test code. Each fixture corpus has one [`corpus.json`](../fixtures/001-python-addition/adversarial/corpus.json) manifest beside its patch files. The manifest predeclares the exact patch digest, threat class, evaluator phase, terminal status, scorer classification, and output-truncation result for every case.
+Guildmind keeps evaluator attacks as versioned fixture data, not only as test code. Each fixture corpus has one [`corpus.json`](../fixtures/001-python-addition/adversarial/corpus.json) manifest beside its patch files. The manifest predeclares the exact patch digest, threat class, evaluator phase, terminal status, scorer classification, and output-truncation result for every case. The three phases are deliberately distinct: `intake` rejects a patch before Git or a sandbox runs, `candidate` terminates inside untrusted execution, and `scorer` obtains a trusted negative verdict.
 
 The strict loader rejects duplicate or unknown fields, invalid enums, inconsistent phase/status combinations, duplicate or unordered IDs, non-regular or symlinked patch files, digest drift, and any `.patch` file that is missing from the manifest. This makes adding an attack without an expectation—and silently changing an existing attack—an immediate test failure.
 
@@ -15,11 +15,22 @@ The strict loader rejects duplicate or unknown fields, invalid enums, inconsiste
 | `functional-no-op` | Functional control | Scorer | `tests_failed`; trusted classification `candidate_failed` |
 | `functional-visible-only` | Functional control | Scorer | `tests_failed`; trusted classification `candidate_failed` |
 | `functional-wrong-operation` | Functional control | Scorer | `tests_failed`; trusted classification `candidate_failed` |
+| `intake-absolute-path` | Boundary integrity | Intake | `invalid_patch`; Git and sandbox absent |
+| `intake-binary` | Boundary integrity | Intake | `invalid_patch`; Git and sandbox absent |
+| `intake-container-target` | Boundary integrity | Intake | `invalid_patch`; Git and sandbox absent |
+| `intake-file-count` | Boundary integrity | Intake | `invalid_patch`; Git and sandbox absent |
+| `intake-grader-path` | Boundary integrity | Intake | `invalid_patch`; Git and sandbox absent |
+| `intake-oversize` | Boundary integrity | Intake | `invalid_patch`; Git and sandbox absent |
+| `intake-submodule-mode` | Boundary integrity | Intake | `invalid_patch`; Git and sandbox absent |
+| `intake-symlink-mode` | Boundary integrity | Intake | `invalid_patch`; Git and sandbox absent |
+| `intake-traversal` | Boundary integrity | Intake | `invalid_patch`; Git and sandbox absent |
 | `resource-memory-oom` | Resource exhaustion | Candidate | `oom_killed`; scorer absent |
 | `resource-output-bomb` | Resource exhaustion | Candidate | `output_exhausted`; output truncated; scorer absent |
 | `resource-timeout` | Resource exhaustion | Candidate | `timed_out`; scorer absent |
 
-The functional controls also run through the trusted local evaluator. A separate precondition test applies `functional-visible-only`, proves that `test_visible.py` passes, and then proves that authoritative visible-plus-hidden evaluation fails; this keeps it distinct from a generic wrong answer. The complete matrix runs through `ContainerEvaluator` in two deliberately separate test paths:
+The nine intake cases run on every host with fail-if-called Git-application and sandbox boundaries. They cover absolute and traversal targets, a relative grader target, an absolute container-mount target, symlink and submodule modes, a Git binary payload with a huge claimed decompressed literal, a real byte-ceiling violation, and a real file-count violation. Exact diagnostics show that each case reaches its intended rejection branch. The [development evidence record](evidence/patch-intake/2026-08-02-development/README.md) preserves the matrix, hashes, test results, parser fixes, and evidence limits.
+
+The functional controls also run through the trusted local evaluator. A separate precondition test applies `functional-visible-only`, proves that `test_visible.py` passes, and then proves that authoritative visible-plus-hidden evaluation fails; this keeps it distinct from a generic wrong answer. The ten cases that intentionally reach candidate or scorer execution run through `ContainerEvaluator` in two deliberately separate test paths:
 
 - `container` uses only `GUILDMIND_DEVELOPMENT_EVALUATOR_IMAGE` and the explicitly relaxed development host policy;
 - `reference_sandbox` uses only `GUILDMIND_REFERENCE_EVALUATOR_IMAGE` and strict host admission.

@@ -128,6 +128,7 @@ class ContainerEvaluator:
         policy = PatchPolicy(
             allowed_paths=spec.allowed_patch_paths,
             max_patch_bytes=spec.max_patch_bytes,
+            max_files=spec.max_patch_files,
         )
         try:
             protocol = spec.python_call_protocol

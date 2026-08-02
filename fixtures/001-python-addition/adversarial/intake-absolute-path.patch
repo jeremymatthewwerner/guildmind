@@ -1,0 +1,6 @@
+diff --git a//etc/passwd b//etc/passwd
+--- a//etc/passwd
++++ b//etc/passwd
+@@ -1 +1 @@
+-root:x:0:0:root:/root:/bin/sh
++root:x:0:0:root:/root:/bin/false

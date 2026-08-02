@@ -7,7 +7,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import cast
+from typing import Never, cast
 
 import pytest
 
@@ -38,6 +38,12 @@ from guildmind.storage import FileArtifactStore
 _REPOSITORY_ROOT = Path(__file__).parents[2]
 _FIXTURE = _REPOSITORY_ROOT / "fixtures" / "001-python-addition"
 _ADVERSARIAL_CORPUS = load_adversarial_corpus(_FIXTURE / "adversarial" / "corpus.json")
+_INTAKE_CORPUS_CASES = tuple(
+    case for case in _ADVERSARIAL_CORPUS.cases if case.expected.phase == "intake"
+)
+_EXECUTION_CORPUS_CASES = tuple(
+    case for case in _ADVERSARIAL_CORPUS.cases if case.expected.phase != "intake"
+)
 _IMAGE = f"registry.example/guildmind/evaluator@sha256:{'a' * 64}"
 _IMAGE_ID = f"sha256:{'b' * 64}"
 _CANDIDATE_RESPONSE = b"opaque candidate response bytes\n"
@@ -77,6 +83,11 @@ class FakeSandbox:
             image_id=selected.image_id,
             diagnostic=selected.diagnostic,
         )
+
+
+class FailIfCalledSandbox:
+    def run(self, request: SandboxRequest) -> Never:
+        pytest.fail(f"unsafe patch reached sandbox dispatch: {request.execution_id}")
 
 
 class CandidateMountLeakEvaluator(ContainerEvaluator):
@@ -510,6 +521,43 @@ def test_invalid_patch_is_rejected_before_sandbox_dispatch(tmp_path: Path) -> No
     assert sandbox.requests == []
 
 
+@pytest.mark.parametrize(
+    "case",
+    _INTAKE_CORPUS_CASES,
+    ids=[case.case_id for case in _INTAKE_CORPUS_CASES],
+)
+def test_intake_corpus_is_rejected_before_apply_or_sandbox_dispatch(
+    case: AdversarialCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expected_diagnostic = {
+        "intake-absolute-path": "plain relative path",
+        "intake-binary": "binary patches",
+        "intake-container-target": "plain relative path",
+        "intake-file-count": "more than 1 files",
+        "intake-grader-path": "unexpected path: grader/cases.json",
+        "intake-oversize": "limit is 4096 bytes",
+        "intake-submodule-mode": "symlink and submodule modes",
+        "intake-symlink-mode": "symlink and submodule modes",
+        "intake-traversal": "contains traversal",
+    }[case.case_id]
+
+    def fail_git_apply(command: list[str], patch: bytes, workspace: Path) -> Never:
+        del command, patch, workspace
+        pytest.fail("unsafe patch reached git apply")
+
+    monkeypatch.setattr("guildmind.sandbox.local._run_git_apply", fail_git_apply)
+
+    result = ContainerEvaluator(sandbox=FailIfCalledSandbox(), image=_IMAGE).evaluate(
+        load_fixture(_FIXTURE),
+        case.patch_path,
+        expected_patch_sha256=case.patch_sha256,
+    )
+
+    _assert_adversarial_result(case, result)
+    assert expected_diagnostic in result.stderr
+
+
 def test_patch_identity_mismatch_is_rejected_before_sandbox_dispatch() -> None:
     sandbox = FakeSandbox()
 
@@ -596,8 +644,8 @@ def test_development_fixture_runner_records_container_evidence(tmp_path: Path) -
 @pytest.mark.container
 @pytest.mark.parametrize(
     "case",
-    _ADVERSARIAL_CORPUS.cases,
-    ids=[case.case_id for case in _ADVERSARIAL_CORPUS.cases],
+    _EXECUTION_CORPUS_CASES,
+    ids=[case.case_id for case in _EXECUTION_CORPUS_CASES],
 )
 def test_development_evaluator_matches_adversarial_corpus(case: AdversarialCase) -> None:
     image = os.environ.get("GUILDMIND_DEVELOPMENT_EVALUATOR_IMAGE")
@@ -633,8 +681,8 @@ def test_reference_host_container_evaluator_smoke() -> None:
 @pytest.mark.reference_sandbox
 @pytest.mark.parametrize(
     "case",
-    _ADVERSARIAL_CORPUS.cases,
-    ids=[case.case_id for case in _ADVERSARIAL_CORPUS.cases],
+    _EXECUTION_CORPUS_CASES,
+    ids=[case.case_id for case in _EXECUTION_CORPUS_CASES],
 )
 def test_reference_host_matches_adversarial_corpus(case: AdversarialCase) -> None:
     image = os.environ.get("GUILDMIND_REFERENCE_EVALUATOR_IMAGE")
@@ -658,6 +706,13 @@ def _assert_adversarial_result(
     expected = case.expected
     assert result.status is expected.evaluation_status
     assert result.output_truncated is expected.output_truncated
+    if expected.phase == "intake":
+        assert result.exit_code is None
+        assert result.execution == {}
+        assert result.raw_candidate_stdout is None
+        assert result.raw_scorer_stdout is None
+        return
+
     assert result.raw_candidate_stdout is not None
     if expected.phase == "candidate":
         assert result.raw_scorer_stdout is None

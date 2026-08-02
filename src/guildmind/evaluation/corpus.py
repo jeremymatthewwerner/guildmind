@@ -23,7 +23,7 @@ _MAX_PATCH_BYTES = 1_048_576
 _MAX_CASES = 1_000
 
 AttackClass = Literal["boundary_integrity", "functional_control", "resource_exhaustion"]
-EvaluationPhase = Literal["candidate", "scorer"]
+EvaluationPhase = Literal["intake", "candidate", "scorer"]
 ScorerClassification = Literal["candidate_failed"]
 
 
@@ -204,7 +204,7 @@ def _load_expectation(raw: object) -> AdversarialExpectation:
             "adversarial corpus evaluation_status is unsupported"
         ) from error
     phase = raw.get("phase")
-    if phase not in {"candidate", "scorer"}:
+    if phase not in {"intake", "candidate", "scorer"}:
         raise FixtureConfigurationError("adversarial corpus phase is invalid")
     scorer_classification = raw.get("scorer_classification")
     if scorer_classification not in {None, "candidate_failed"}:
@@ -213,7 +213,12 @@ def _load_expectation(raw: object) -> AdversarialExpectation:
     if type(output_truncated) is not bool:
         raise FixtureConfigurationError("adversarial corpus output_truncated is invalid")
 
-    if phase == "candidate":
+    if phase == "intake":
+        if status is not EvaluationStatus.INVALID_PATCH or scorer_classification is not None:
+            raise FixtureConfigurationError(
+                "intake-phase corpus expectation has inconsistent status or classification"
+            )
+    elif phase == "candidate":
         if (
             status
             not in {

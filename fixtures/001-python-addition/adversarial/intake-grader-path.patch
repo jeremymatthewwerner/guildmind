@@ -1,0 +1,6 @@
+diff --git a/grader/cases.json b/grader/cases.json
+--- a/grader/cases.json
++++ b/grader/cases.json
+@@ -1 +1 @@
+-{"cases":[]}
++{"cases":[{"expected":true}]}
