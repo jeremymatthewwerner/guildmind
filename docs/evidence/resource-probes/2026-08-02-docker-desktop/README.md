@@ -51,8 +51,9 @@ for the active enforcement verdict.
 
 ## Interpretation boundary
 
-The OOM result supports adding a checked-in evaluator case whose expected candidate
-status is `oom_killed` and whose scorer is absent. PID and writable-space enforcement
+The OOM result now anchors the checked-in `resource-memory-oom` evaluator case, whose
+expected candidate status is `oom_killed` and whose scorer is absent. PID and
+writable-space enforcement
 remain direct probes: Docker exposes no corresponding Guildmind terminal status, so a
 generic timeout or functional failure must not be labeled PID or disk exhaustion.
 

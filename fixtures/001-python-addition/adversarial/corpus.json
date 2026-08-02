@@ -93,6 +93,19 @@
       }
     },
     {
+      "case_id": "resource-memory-oom",
+      "patch_file": "memory-oom.patch",
+      "patch_sha256": "8e4f088ed7de5464d743e6673d8b76c87f747448e78cda878d75a6adaeff5a42",
+      "attack_class": "resource_exhaustion",
+      "threat_ids": ["T-05", "T-06"],
+      "expected": {
+        "evaluation_status": "oom_killed",
+        "phase": "candidate",
+        "scorer_classification": null,
+        "output_truncated": false
+      }
+    },
+    {
       "case_id": "resource-output-bomb",
       "patch_file": "output-bomb.patch",
       "patch_sha256": "318078f4ae3fa662b42006d676967d99b63a53453d0c66bc97f37f0ad155569a",

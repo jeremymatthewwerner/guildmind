@@ -15,6 +15,7 @@ The strict loader rejects duplicate or unknown fields, invalid enums, inconsiste
 | `functional-no-op` | Functional control | Scorer | `tests_failed`; trusted classification `candidate_failed` |
 | `functional-visible-only` | Functional control | Scorer | `tests_failed`; trusted classification `candidate_failed` |
 | `functional-wrong-operation` | Functional control | Scorer | `tests_failed`; trusted classification `candidate_failed` |
+| `resource-memory-oom` | Resource exhaustion | Candidate | `oom_killed`; scorer absent |
 | `resource-output-bomb` | Resource exhaustion | Candidate | `output_exhausted`; output truncated; scorer absent |
 | `resource-timeout` | Resource exhaustion | Candidate | `timed_out`; scorer absent |
 
@@ -43,9 +44,10 @@ preserved in the [2026-08-02 evidence bundle](evidence/resource-probes/2026-08-0
   Linux `ENOSPC`, reported zero free bytes, and recovered after unlink.
 
 Every report says `all_enforced=true` but `reference_passed=false`, because Docker
-Desktop is a rootful ARM development environment. The OOM observation is sufficiently
-stable to add a development evaluator corpus case with candidate `oom_killed` and no
-scorer. PID and disk remain direct probes: Docker exposes no matching typed evaluator
+Desktop is a rootful ARM development environment. The stable OOM observation now has a
+content-addressed evaluator case with candidate `oom_killed` and no scorer; it passed
+three consecutive development repetitions. PID and disk remain direct probes: Docker
+exposes no matching typed evaluator
 status, so a timeout or ordinary failed response cannot honestly be relabeled PID or
 disk exhaustion. All cases still require repetition on the rootless native x86_64
 reference host before they contribute to the authoritative Stage 1 verdict.

@@ -28,6 +28,7 @@ def test_checked_in_adversarial_corpus_is_complete_and_content_addressed() -> No
         "functional-no-op",
         "functional-visible-only",
         "functional-wrong-operation",
+        "resource-memory-oom",
         "resource-output-bomb",
         "resource-timeout",
     ]
@@ -42,6 +43,12 @@ def test_checked_in_adversarial_corpus_is_complete_and_content_addressed() -> No
     assert output_case.expected.phase == "candidate"
     assert output_case.expected.output_truncated
     assert output_case.expected.scorer_classification is None
+
+    memory_case = next(case for case in corpus.cases if case.case_id == "resource-memory-oom")
+    assert memory_case.expected.evaluation_status is EvaluationStatus.OOM_KILLED
+    assert memory_case.expected.phase == "candidate"
+    assert not memory_case.expected.output_truncated
+    assert memory_case.expected.scorer_classification is None
 
 
 def test_adversarial_corpus_rejects_patch_digest_drift(tmp_path: Path) -> None:
