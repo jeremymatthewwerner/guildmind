@@ -26,7 +26,10 @@ class FileArtifactStore:
 
     def __init__(self, root: Path) -> None:
         self.root = root.resolve()
+        if self.root == Path(self.root.anchor):
+            raise ValueError("artifact store root cannot be a filesystem root")
         self.root.mkdir(parents=True, exist_ok=True)
+        self._directory_identities = self._snapshot_directory_chain(self.root)
 
     def put_bytes(self, data: bytes, *, media_type: str) -> ArtifactRef:
         digest = sha256_bytes(data)
@@ -67,7 +70,7 @@ class FileArtifactStore:
 
     def _artifact_parent(self, digest: str, *, create: bool) -> Path:
         expected = self.root / "sha256" / digest[:2]
-        self._require_real_directory(self.root)
+        self._validate_directory_chain()
         current = self.root
         for component in ("sha256", digest[:2]):
             candidate = current / component
@@ -89,6 +92,41 @@ class FileArtifactStore:
                 return expected
             current = candidate
         return expected
+
+    @staticmethod
+    def _snapshot_directory_chain(path: Path) -> tuple[tuple[Path, int, int], ...]:
+        current = Path(path.anchor)
+        identities: list[tuple[Path, int, int]] = []
+        for component in path.parts[1:]:
+            current /= component
+            try:
+                metadata = os.lstat(current)
+            except OSError as error:
+                raise ArtifactCorruptionError(
+                    f"artifact directory {current} could not be inspected"
+                ) from error
+            if not stat.S_ISDIR(metadata.st_mode):
+                raise ArtifactCorruptionError(
+                    f"artifact directory {current} is not a real directory"
+                )
+            identities.append((current, metadata.st_dev, metadata.st_ino))
+        return tuple(identities)
+
+    def _validate_directory_chain(self) -> None:
+        for path, expected_device, expected_inode in self._directory_identities:
+            try:
+                metadata = os.lstat(path)
+            except OSError as error:
+                raise ArtifactCorruptionError(
+                    f"artifact directory {path} could not be inspected"
+                ) from error
+            if not stat.S_ISDIR(metadata.st_mode) or (
+                metadata.st_dev,
+                metadata.st_ino,
+            ) != (expected_device, expected_inode):
+                raise ArtifactCorruptionError(
+                    f"artifact directory {path} changed after store initialization"
+                )
 
     @staticmethod
     def _require_real_directory(path: Path, *, missing_ok: bool = False) -> bool:

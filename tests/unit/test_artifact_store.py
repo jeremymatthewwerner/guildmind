@@ -148,6 +148,34 @@ def test_artifact_store_rejects_shard_directory_symlink_without_outside_mutation
     assert sorted(path.name for path in outside.iterdir()) == ["sentinel"]
 
 
+def test_artifact_store_rejects_replaced_ancestor_without_outside_mutation(
+    tmp_path: Path,
+) -> None:
+    original_parent = tmp_path / "state"
+    store = FileArtifactStore(original_parent / "artifacts")
+    moved_parent = tmp_path / "state-before-replacement"
+    original_parent.rename(moved_parent)
+    outside_parent = tmp_path / "outside"
+    outside_artifacts = outside_parent / "artifacts"
+    outside_artifacts.mkdir(parents=True)
+    sentinel = outside_artifacts / "sentinel"
+    sentinel.write_bytes(b"unchanged")
+    original_parent.symlink_to(outside_parent, target_is_directory=True)
+
+    with pytest.raises(ArtifactCorruptionError, match="changed after store initialization"):
+        store.put_bytes(b"trusted", media_type="application/octet-stream")
+
+    assert sentinel.read_bytes() == b"unchanged"
+    assert sorted(path.name for path in outside_artifacts.iterdir()) == ["sentinel"]
+
+
+def test_artifact_store_rejects_filesystem_root() -> None:
+    filesystem_root = Path(Path.cwd().anchor)
+
+    with pytest.raises(ValueError, match="filesystem root"):
+        FileArtifactStore(filesystem_root)
+
+
 def test_artifact_store_verifies_fsynced_temporary_before_publication(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
