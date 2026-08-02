@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
+import stat
 import tempfile
+from contextlib import suppress
 from pathlib import Path
 
 from guildmind.domain import ArtifactRef, sha256_bytes
@@ -16,8 +19,9 @@ class ArtifactCorruptionError(RuntimeError):
 class FileArtifactStore:
     """Store immutable blobs below ``sha256/<prefix>/<digest>``.
 
-    A blob is flushed and atomically renamed before its reference is returned. The
-    caller can therefore commit the reference to SQLite only after the bytes exist.
+    A blob is flushed, verified, and atomically linked into its canonical path before
+    its reference is returned. The caller can therefore commit the reference to SQLite
+    only after the bytes exist, without any publisher replacing an existing blob.
     """
 
     def __init__(self, root: Path) -> None:
@@ -27,30 +31,26 @@ class FileArtifactStore:
     def put_bytes(self, data: bytes, *, media_type: str) -> ArtifactRef:
         digest = sha256_bytes(data)
         relative_path = Path("sha256") / digest[:2] / digest
-        target = self.root / relative_path
-        target.parent.mkdir(parents=True, exist_ok=True)
-
-        if target.exists():
-            self._verify_path(target, digest=digest, size_bytes=len(data))
-        else:
-            self._write_atomic(target, data)
-
-        return ArtifactRef(
+        reference = ArtifactRef(
             media_type=media_type,
             size_bytes=len(data),
             sha256=digest,
             storage_ref=relative_path.as_posix(),
         )
+        target = self._artifact_parent(digest, create=True) / digest
+
+        self._write_atomic(target, data)
+        return reference
 
     def put_text(self, text: str, *, media_type: str = "text/plain; charset=utf-8") -> ArtifactRef:
         return self.put_bytes(text.encode("utf-8"), media_type=media_type)
 
     def get_bytes(self, reference: ArtifactRef) -> bytes:
-        path = self.path_for(reference)
-        data = path.read_bytes()
-        if len(data) != reference.size_bytes or sha256_bytes(data) != reference.sha256:
-            raise ArtifactCorruptionError(f"artifact {reference.sha256} failed verification")
-        return data
+        return self._read_verified_path(
+            self.path_for(reference),
+            digest=reference.sha256,
+            size_bytes=reference.size_bytes,
+        )
 
     def verify(self, reference: ArtifactRef) -> None:
         self._verify_path(
@@ -63,22 +63,143 @@ class FileArtifactStore:
         expected = Path("sha256") / reference.sha256[:2] / reference.sha256
         if reference.storage_ref != expected.as_posix():
             raise ArtifactCorruptionError("artifact storage reference does not match its digest")
-        path = (self.root / expected).resolve()
-        if not path.is_relative_to(self.root):
-            raise ArtifactCorruptionError("artifact reference escapes the store root")
-        return path
+        return self._artifact_parent(reference.sha256, create=False) / reference.sha256
+
+    def _artifact_parent(self, digest: str, *, create: bool) -> Path:
+        expected = self.root / "sha256" / digest[:2]
+        self._require_real_directory(self.root)
+        current = self.root
+        for component in ("sha256", digest[:2]):
+            candidate = current / component
+            if create:
+                created = False
+                try:
+                    os.mkdir(candidate)
+                    created = True
+                except FileExistsError:
+                    pass
+                except OSError as error:
+                    raise ArtifactCorruptionError(
+                        f"artifact directory {candidate} could not be created safely"
+                    ) from error
+                self._require_real_directory(candidate)
+                if created:
+                    self._fsync_directory(current)
+            elif not self._require_real_directory(candidate, missing_ok=True):
+                return expected
+            current = candidate
+        return expected
 
     @staticmethod
-    def _verify_path(path: Path, *, digest: str, size_bytes: int) -> None:
+    def _require_real_directory(path: Path, *, missing_ok: bool = False) -> bool:
         try:
-            data = path.read_bytes()
+            path_metadata = os.lstat(path)
+        except FileNotFoundError as error:
+            if missing_ok:
+                return False
+            raise ArtifactCorruptionError(f"missing artifact directory {path}") from error
+        except OSError as error:
+            raise ArtifactCorruptionError(
+                f"artifact directory {path} could not be inspected"
+            ) from error
+        if not stat.S_ISDIR(path_metadata.st_mode):
+            raise ArtifactCorruptionError(f"artifact directory {path} is not a real directory")
+        return True
+
+    def _verify_path(self, path: Path, *, digest: str, size_bytes: int) -> None:
+        self._read_verified_path(path, digest=digest, size_bytes=size_bytes)
+
+    def _read_verified_path(self, path: Path, *, digest: str, size_bytes: int) -> bytes:
+        expected_parent = self._artifact_parent(digest, create=False)
+        if path.parent != expected_parent:
+            raise ArtifactCorruptionError(f"artifact {digest} is outside its canonical directory")
+
+        try:
+            path_metadata = os.lstat(path)
         except FileNotFoundError as error:
             raise ArtifactCorruptionError(f"missing artifact {digest}") from error
-        if len(data) != size_bytes or sha256_bytes(data) != digest:
-            raise ArtifactCorruptionError(f"artifact {digest} failed verification")
+        except OSError as error:
+            raise ArtifactCorruptionError(f"artifact {digest} could not be inspected") from error
 
-    @staticmethod
-    def _write_atomic(target: Path, data: bytes) -> None:
+        if not stat.S_ISREG(path_metadata.st_mode):
+            raise ArtifactCorruptionError(f"artifact {digest} is not a regular file")
+
+        open_flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+        try:
+            descriptor = os.open(path, open_flags)
+        except FileNotFoundError as error:
+            raise ArtifactCorruptionError(f"missing artifact {digest}") from error
+        except OSError as error:
+            raise ArtifactCorruptionError(
+                f"artifact {digest} could not be opened safely"
+            ) from error
+
+        chunks: list[bytes] = []
+        observed_digest = hashlib.sha256()
+        observed_size = 0
+        try:
+            opened_metadata = os.fstat(descriptor)
+            if (
+                not stat.S_ISREG(opened_metadata.st_mode)
+                or (opened_metadata.st_dev, opened_metadata.st_ino)
+                != (path_metadata.st_dev, path_metadata.st_ino)
+                or opened_metadata.st_size != size_bytes
+            ):
+                raise ArtifactCorruptionError(f"artifact {digest} failed verification")
+
+            while chunk := os.read(descriptor, 1024 * 1024):
+                chunks.append(chunk)
+                observed_digest.update(chunk)
+                observed_size += len(chunk)
+                if observed_size > size_bytes:
+                    raise ArtifactCorruptionError(f"artifact {digest} failed verification")
+
+            final_opened_metadata = os.fstat(descriptor)
+            try:
+                final_path_metadata = os.lstat(path)
+            except FileNotFoundError as error:
+                raise ArtifactCorruptionError(f"missing artifact {digest}") from error
+
+            opened_snapshot = (
+                opened_metadata.st_dev,
+                opened_metadata.st_ino,
+                opened_metadata.st_size,
+                opened_metadata.st_mtime_ns,
+                opened_metadata.st_ctime_ns,
+            )
+            final_opened_snapshot = (
+                final_opened_metadata.st_dev,
+                final_opened_metadata.st_ino,
+                final_opened_metadata.st_size,
+                final_opened_metadata.st_mtime_ns,
+                final_opened_metadata.st_ctime_ns,
+            )
+            final_path_snapshot = (
+                final_path_metadata.st_dev,
+                final_path_metadata.st_ino,
+                final_path_metadata.st_size,
+                final_path_metadata.st_mtime_ns,
+                final_path_metadata.st_ctime_ns,
+            )
+            if (
+                not stat.S_ISREG(final_path_metadata.st_mode)
+                or opened_snapshot != final_opened_snapshot
+                or opened_snapshot != final_path_snapshot
+            ):
+                raise ArtifactCorruptionError(f"artifact {digest} changed during verification")
+        except ArtifactCorruptionError:
+            raise
+        except OSError as error:
+            raise ArtifactCorruptionError(f"artifact {digest} failed verification") from error
+        finally:
+            os.close(descriptor)
+
+        if observed_size != size_bytes or observed_digest.hexdigest() != digest:
+            raise ArtifactCorruptionError(f"artifact {digest} failed verification")
+        return b"".join(chunks)
+
+    def _write_atomic(self, target: Path, data: bytes) -> None:
+        digest = sha256_bytes(data)
         descriptor, temporary_name = tempfile.mkstemp(prefix=".artifact-", dir=target.parent)
         temporary = Path(temporary_name)
         try:
@@ -86,11 +207,23 @@ class FileArtifactStore:
                 stream.write(data)
                 stream.flush()
                 os.fsync(stream.fileno())
-            os.replace(temporary, target)
-            directory_descriptor = os.open(target.parent, os.O_RDONLY)
-            try:
-                os.fsync(directory_descriptor)
-            finally:
-                os.close(directory_descriptor)
+
+            self._verify_path(temporary, digest=digest, size_bytes=len(data))
+            # Another publisher may win, or a canonical entry may already exist. Never
+            # replace it; final verification decides whether it is a valid dedupe.
+            with suppress(FileExistsError):
+                os.link(temporary, target, follow_symlinks=False)
         finally:
             temporary.unlink(missing_ok=True)
+            self._fsync_directory(target.parent)
+
+        self._verify_path(target, digest=digest, size_bytes=len(data))
+
+    @staticmethod
+    def _fsync_directory(directory: Path) -> None:
+        open_flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_DIRECTORY", 0)
+        descriptor = os.open(directory, open_flags)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
