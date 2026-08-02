@@ -25,6 +25,7 @@ from guildmind.sandbox import (
     DockerSandbox,
     SandboxConfigurationError,
     SandboxUnavailableError,
+    run_containment_probe_suite,
     run_resource_probe_suite,
     run_sandbox_self_test,
 )
@@ -58,6 +59,33 @@ def _build_parser() -> argparse.ArgumentParser:
         help="digest-pinned evaluator image already present on the Docker host",
     )
     doctor.set_defaults(handler=_doctor)
+
+    containment_probe = subcommands.add_parser(
+        "probe-containment",
+        help="emit active, machine-readable evaluator containment evidence",
+    )
+    containment_probe.add_argument(
+        "--development",
+        action="store_true",
+        help="label results development-only and allow the relaxed development host policy",
+    )
+    containment_probe.add_argument(
+        "--evaluator-image",
+        default=None,
+        help="digest-pinned evaluator image already present on the selected Docker host",
+    )
+    containment_probe.add_argument(
+        "--probe-id",
+        default=None,
+        help="stable evidence identifier (a random identifier is generated when omitted)",
+    )
+    containment_probe.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="write canonical evidence to a new file without overwriting existing evidence",
+    )
+    containment_probe.set_defaults(handler=_probe_containment)
 
     resource_probe = subcommands.add_parser(
         "probe-resources",
@@ -207,6 +235,78 @@ def _doctor(arguments: argparse.Namespace) -> int:
         print(result["warning"])
     required_ready = production_sandbox_ready if arguments.production else local_ready
     return 0 if required_ready else 1
+
+
+def _probe_containment(arguments: argparse.Namespace) -> int:
+    environment_variable = (
+        "GUILDMIND_DEVELOPMENT_EVALUATOR_IMAGE"
+        if arguments.development
+        else "GUILDMIND_REFERENCE_EVALUATOR_IMAGE"
+    )
+    image = arguments.evaluator_image or os.environ.get(environment_variable)
+    error_schema = "guildmind.containment-probe-error/v1"
+    if image is None:
+        _print_json(
+            {
+                "error": f"--evaluator-image or {environment_variable} is required",
+                "schema_version": error_schema,
+            }
+        )
+        return 1
+    probe_id = arguments.probe_id or f"containment-probe-{uuid.uuid4().hex}"
+    if not probe_id.strip():
+        _print_json(
+            {
+                "error": "--probe-id must contain non-whitespace characters",
+                "schema_version": error_schema,
+            }
+        )
+        return 1
+    if arguments.output is not None:
+        if os.path.lexists(arguments.output):
+            _print_json(
+                {
+                    "error": f"containment probe evidence already exists: {arguments.output}",
+                    "schema_version": error_schema,
+                }
+            )
+            return 1
+        if not arguments.output.parent.is_dir():
+            _print_json(
+                {
+                    "error": f"containment probe evidence directory is unavailable: "
+                    f"{arguments.output.parent}",
+                    "schema_version": error_schema,
+                }
+            )
+            return 1
+    policy = DockerHostPolicy.development_only() if arguments.development else DockerHostPolicy()
+    sandbox = DockerSandbox(host_policy=policy)
+    try:
+        report = run_containment_probe_suite(
+            sandbox,
+            image=image,
+            code_revision=_code_revision(),
+            probe_id=probe_id,
+        )
+    except (OSError, ValueError, SandboxUnavailableError) as error:
+        _print_json({"error": str(error), "schema_version": error_schema})
+        return 1
+    if arguments.output is not None:
+        try:
+            with arguments.output.open("xb") as stream:
+                stream.write(report.canonical_bytes() + b"\n")
+        except OSError as error:
+            _print_json(
+                {
+                    "error": f"cannot write containment probe evidence: {error}",
+                    "schema_version": error_schema,
+                }
+            )
+            return 1
+    _print_json(report.model_dump(mode="json"))
+    passed = report.all_contained if arguments.development else report.reference_passed
+    return 0 if passed else 1
 
 
 def _probe_resources(arguments: argparse.Namespace) -> int:

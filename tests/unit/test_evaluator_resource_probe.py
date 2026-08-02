@@ -105,7 +105,10 @@ def test_evaluator_image_includes_the_fixed_probe_program() -> None:
     dockerfile = (_IMAGE_ROOT / "Dockerfile").read_text(encoding="utf-8")
     dockerignore = (_IMAGE_ROOT / ".dockerignore").read_text(encoding="utf-8")
 
-    assert "COPY --chmod=0555 resource_probe.py /opt/guildmind/resource_probe.py" in dockerfile
+    assert (
+        "COPY --chown=0:0 --chmod=0555 resource_probe.py /opt/guildmind/resource_probe.py"
+        in dockerfile
+    )
     assert "!resource_probe.py" in dockerignore.splitlines()
     assert hashlib.sha256(_PROBE_PATH.read_bytes()).hexdigest() == (
         resource_probe_contract._EXPECTED_PROGRAM_SHA256

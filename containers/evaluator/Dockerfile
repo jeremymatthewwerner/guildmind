@@ -11,9 +11,10 @@ ENV LANG=C \
     PYTHONNOUSERSITE=1 \
     TZ=UTC
 
-COPY --chmod=0555 invoke.py /opt/guildmind/invoke.py
-COPY --chmod=0555 resource_probe.py /opt/guildmind/resource_probe.py
-COPY --chmod=0555 score.py /opt/guildmind/score.py
+COPY --chown=0:0 --chmod=0555 containment_probe.py /opt/guildmind/containment_probe.py
+COPY --chown=0:0 --chmod=0555 invoke.py /opt/guildmind/invoke.py
+COPY --chown=0:0 --chmod=0555 resource_probe.py /opt/guildmind/resource_probe.py
+COPY --chown=0:0 --chmod=0555 score.py /opt/guildmind/score.py
 
 USER 65532:65532
 WORKDIR /workspace

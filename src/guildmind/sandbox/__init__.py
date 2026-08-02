@@ -14,6 +14,13 @@ from guildmind.sandbox.base import (
     SandboxStatus,
     SandboxUnavailableError,
 )
+from guildmind.sandbox.containment_probe import (
+    ContainmentPhase,
+    ContainmentProbeSuiteEvidence,
+    ContainmentVerdict,
+    containment_probe_spec_sha256,
+    run_containment_probe_suite,
+)
 from guildmind.sandbox.docker import (
     DockerCleanupEvidence,
     DockerContainerState,
@@ -48,6 +55,9 @@ from guildmind.sandbox.selftest import SandboxSelfTestReport, run_sandbox_self_t
 
 __all__ = [
     "ConfigurationVerdict",
+    "ContainmentPhase",
+    "ContainmentProbeSuiteEvidence",
+    "ContainmentVerdict",
     "DockerCleanupEvidence",
     "DockerContainerState",
     "DockerExecutionEvidence",
@@ -76,8 +86,10 @@ __all__ = [
     "ValidatedPatch",
     "assess_docker_info",
     "candidate_resource_limits",
+    "containment_probe_spec_sha256",
     "copy_and_apply_patch",
     "resource_probe_spec_sha256",
+    "run_containment_probe_suite",
     "run_resource_probe_suite",
     "run_sandbox_self_test",
     "validate_patch",

@@ -1,5 +1,6 @@
 *
 !Dockerfile
+!containment_probe.py
 !invoke.py
 !resource_probe.py
 !score.py

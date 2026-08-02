@@ -174,6 +174,136 @@ def test_resource_probe_requires_an_explicit_tier_specific_image(
     assert "GUILDMIND_DEVELOPMENT_EVALUATOR_IMAGE" in response["error"]
 
 
+def test_containment_probe_requires_an_explicit_tier_specific_image(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.delenv("GUILDMIND_DEVELOPMENT_EVALUATOR_IMAGE", raising=False)
+
+    exit_code = main(["probe-containment", "--development"])
+
+    response = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert response["schema_version"] == "guildmind.containment-probe-error/v1"
+    assert "GUILDMIND_DEVELOPMENT_EVALUATOR_IMAGE" in response["error"]
+
+
+class _FakeContainmentReport:
+    all_contained = True
+    reference_passed = False
+
+    def model_dump(self, *, mode: str) -> dict[str, object]:
+        assert mode == "json"
+        return {
+            "all_contained": self.all_contained,
+            "reference_eligible": False,
+            "reference_passed": self.reference_passed,
+            "schema_version": "guildmind.containment-probe-evidence/v1",
+        }
+
+    def canonical_bytes(self) -> bytes:
+        return json.dumps(
+            self.model_dump(mode="json"),
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode()
+
+
+def test_containment_probe_labels_development_evidence_and_writes_once(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    captured: dict[str, object] = {}
+    output = tmp_path / "containment-evidence.json"
+
+    class FakeProbeSandbox:
+        def __init__(self, *, host_policy: object) -> None:
+            captured["host_policy"] = host_policy
+
+    def fake_run(sandbox: object, **arguments: object) -> _FakeContainmentReport:
+        captured["sandbox"] = sandbox
+        captured.update(arguments)
+        return _FakeContainmentReport()
+
+    monkeypatch.setattr("guildmind.cli.DockerSandbox", FakeProbeSandbox)
+    monkeypatch.setattr("guildmind.cli.run_containment_probe_suite", fake_run)
+    monkeypatch.setattr("guildmind.cli._code_revision", lambda: "revision-123")
+
+    exit_code = main(
+        [
+            "probe-containment",
+            "--development",
+            "--evaluator-image",
+            f"guildmind/evaluator@sha256:{'a' * 64}",
+            "--probe-id",
+            "containment-123",
+            "--output",
+            str(output),
+        ]
+    )
+
+    response = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert response["all_contained"] is True
+    assert captured["code_revision"] == "revision-123"
+    assert captured["probe_id"] == "containment-123"
+    host_policy = captured["host_policy"]
+    assert isinstance(host_policy, DockerHostPolicy)
+    assert host_policy.mode is DockerHostMode.DEVELOPMENT_ONLY
+    assert output.read_bytes() == _FakeContainmentReport().canonical_bytes() + b"\n"
+
+
+def test_containment_probe_never_overwrites_existing_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "containment-evidence.json"
+    output.write_text("preserve", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "guildmind.cli.run_containment_probe_suite",
+        lambda *args, **kwargs: _FakeContainmentReport(),
+    )
+
+    exit_code = main(
+        [
+            "probe-containment",
+            "--development",
+            "--evaluator-image",
+            f"guildmind/evaluator@sha256:{'a' * 64}",
+            "--output",
+            str(output),
+        ]
+    )
+
+    response = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert response["schema_version"] == "guildmind.containment-probe-error/v1"
+    assert output.read_text(encoding="utf-8") == "preserve"
+
+
+def test_containment_probe_rejects_whitespace_id_with_machine_readable_error(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = main(
+        [
+            "probe-containment",
+            "--development",
+            "--evaluator-image",
+            f"guildmind/evaluator@sha256:{'a' * 64}",
+            "--probe-id",
+            "   ",
+        ]
+    )
+
+    response = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert response["schema_version"] == "guildmind.containment-probe-error/v1"
+    assert "non-whitespace" in response["error"]
+
+
 def test_resource_probe_rejects_whitespace_id_with_machine_readable_error(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
