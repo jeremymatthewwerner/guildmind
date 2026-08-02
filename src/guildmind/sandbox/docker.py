@@ -183,7 +183,71 @@ class _CaptureResult:
     stdout: bytes
     stderr: bytes
     termination: SandboxStatus | None
-    termination_diagnostic: str | None = None
+    kill: DockerKillEvidence
+
+
+@dataclass(frozen=True, slots=True)
+class DockerContainerState:
+    """Normalized state inspected before a managed container is removed."""
+
+    exit_code: int
+    oom_killed: bool
+    running: bool
+    error: str
+
+
+@dataclass(frozen=True, slots=True)
+class DockerKillEvidence:
+    """Host-side evidence for a controller-requested container kill."""
+
+    attempted: bool
+    succeeded: bool | None
+    diagnostic: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class DockerCleanupEvidence:
+    """Host-side evidence that a managed container was removed and is absent."""
+
+    target: str | None
+    removal_attempted: bool
+    removal_succeeded: bool | None
+    absence_checked: bool
+    absent: bool | None
+    diagnostic: str | None = None
+
+    @property
+    def confirmed(self) -> bool:
+        return self.removal_succeeded is True and self.absent is True
+
+
+@dataclass(frozen=True, slots=True)
+class DockerExecutionEvidence:
+    """Lifecycle observations retained separately from the stable sandbox result."""
+
+    container_id: str | None
+    image_id: str | None
+    state: DockerContainerState | None
+    termination_trigger: SandboxStatus | None
+    kill: DockerKillEvidence
+    cleanup: DockerCleanupEvidence
+    pre_cleanup_status: SandboxStatus
+
+
+@dataclass(frozen=True, slots=True)
+class ObservedSandboxRun:
+    """A normal sandbox result paired with Docker-specific lifecycle evidence."""
+
+    result: SandboxResult
+    evidence: DockerExecutionEvidence
+
+
+@dataclass(frozen=True, slots=True)
+class _PreCleanupRun:
+    result: SandboxResult
+    state: DockerContainerState | None
+    termination_trigger: SandboxStatus | None
+    kill: DockerKillEvidence
 
 
 class _CombinedCapture:
@@ -238,6 +302,16 @@ class DockerSandbox:
         return self._inspect_image(reference).image_id
 
     def run(self, request: SandboxRequest) -> SandboxResult:
+        """Run one request and return the stable adapter-independent result."""
+        return self.run_observed(request).result
+
+    def run_observed(
+        self,
+        request: SandboxRequest,
+        *,
+        verify_cleanup: bool = True,
+    ) -> ObservedSandboxRun:
+        """Run one request while retaining typed Docker lifecycle observations."""
         assessment = self.assess_host()
         assessment.require_accepted()
         image = self._inspect_image(request.image)
@@ -251,46 +325,75 @@ class DockerSandbox:
         try:
             created = self._runner.run(create_argv, timeout=_CONTROL_TIMEOUT_SECONDS)
         except (OSError, subprocess.TimeoutExpired) as error:
-            return _infrastructure_result(
+            result = _infrastructure_result(
                 request,
                 image_id=image.image_id,
                 diagnostic=f"docker create failed: {error}",
             )
+            return _observed_without_container(result, image_id=image.image_id)
         if created.returncode != 0:
-            return _infrastructure_result(
+            result = _infrastructure_result(
                 request,
                 image_id=image.image_id,
                 diagnostic=f"docker create failed: {_diagnostic(created)}",
             )
+            return _observed_without_container(result, image_id=image.image_id)
 
         container_id = created.stdout.decode("ascii", errors="replace").strip()
         cleanup_target = container_id if _CONTAINER_ID.fullmatch(container_id) else container_name
         if _CONTAINER_ID.fullmatch(container_id) is None:
-            cleanup = self._remove_container(cleanup_target)
+            cleanup = self._cleanup_container(cleanup_target, verify_absence=verify_cleanup)
             diagnostic = "docker create returned a malformed container ID"
-            if cleanup is not None:
-                diagnostic = f"{diagnostic}; cleanup failed: {cleanup}"
-            return _infrastructure_result(
+            if cleanup.diagnostic is not None:
+                diagnostic = f"{diagnostic}; cleanup failed: {cleanup.diagnostic}"
+            result = _infrastructure_result(
                 request,
                 image_id=image.image_id,
                 diagnostic=diagnostic,
             )
+            return ObservedSandboxRun(
+                result=result,
+                evidence=DockerExecutionEvidence(
+                    container_id=None,
+                    image_id=image.image_id,
+                    state=None,
+                    termination_trigger=None,
+                    kill=_no_kill_evidence(),
+                    cleanup=cleanup,
+                    pre_cleanup_status=result.status,
+                ),
+            )
 
-        result: SandboxResult
         try:
-            result = self._start_and_observe(request, container_id, image.image_id)
+            observed = self._start_and_observe(request, container_id, image.image_id)
         finally:
-            cleanup_error = self._remove_container(container_id)
-        if cleanup_error is not None:
-            return _infrastructure_result(
+            cleanup = self._cleanup_container(container_id, verify_absence=verify_cleanup)
+        result = observed.result
+        cleanup_succeeded = (
+            cleanup.confirmed if verify_cleanup else cleanup.removal_succeeded is True
+        )
+        if not cleanup_succeeded:
+            diagnostic = cleanup.diagnostic or "container cleanup was not verified"
+            result = _infrastructure_result(
                 request,
                 container_id=container_id,
                 image_id=image.image_id,
-                stdout=result.stdout,
-                stderr=result.stderr,
-                diagnostic=f"container cleanup failed: {cleanup_error}",
+                stdout=observed.result.stdout,
+                stderr=observed.result.stderr,
+                diagnostic=f"container cleanup failed: {diagnostic}",
             )
-        return result
+        return ObservedSandboxRun(
+            result=result,
+            evidence=DockerExecutionEvidence(
+                container_id=container_id,
+                image_id=image.image_id,
+                state=observed.state,
+                termination_trigger=observed.termination_trigger,
+                kill=observed.kill,
+                cleanup=cleanup,
+                pre_cleanup_status=observed.result.status,
+            ),
+        )
 
     def _inspect_image(self, reference: str) -> _ImageIdentity:
         validate_image_reference(reference)
@@ -398,18 +501,20 @@ class DockerSandbox:
         request: SandboxRequest,
         container_id: str,
         image_id: str,
-    ) -> SandboxResult:
+    ) -> _PreCleanupRun:
         try:
             process = self._runner.popen(
                 [self.docker_executable, "start", "--attach", container_id]
             )
             capture = self._capture_attached(process, request, container_id)
         except (OSError, subprocess.TimeoutExpired) as error:
-            return _infrastructure_result(
-                request,
-                container_id=container_id,
-                image_id=image_id,
-                diagnostic=f"docker start failed: {error}",
+            return _pre_cleanup_error(
+                _infrastructure_result(
+                    request,
+                    container_id=container_id,
+                    image_id=image_id,
+                    diagnostic=f"docker start failed: {error}",
+                )
             )
 
         try:
@@ -423,33 +528,42 @@ class DockerSandbox:
                 timeout=_CONTROL_TIMEOUT_SECONDS,
             )
         except (OSError, subprocess.TimeoutExpired) as error:
-            return _infrastructure_result(
-                request,
-                container_id=container_id,
-                image_id=image_id,
-                stdout=capture.stdout,
-                stderr=capture.stderr,
-                diagnostic=f"cannot inspect completed container: {error}",
+            return _pre_cleanup_error(
+                _infrastructure_result(
+                    request,
+                    container_id=container_id,
+                    image_id=image_id,
+                    stdout=capture.stdout,
+                    stderr=capture.stderr,
+                    diagnostic=f"cannot inspect completed container: {error}",
+                ),
+                capture=capture,
             )
         if inspected.returncode != 0:
-            return _infrastructure_result(
-                request,
-                container_id=container_id,
-                image_id=image_id,
-                stdout=capture.stdout,
-                stderr=capture.stderr,
-                diagnostic=f"cannot inspect completed container: {_diagnostic(inspected)}",
+            return _pre_cleanup_error(
+                _infrastructure_result(
+                    request,
+                    container_id=container_id,
+                    image_id=image_id,
+                    stdout=capture.stdout,
+                    stderr=capture.stderr,
+                    diagnostic=f"cannot inspect completed container: {_diagnostic(inspected)}",
+                ),
+                capture=capture,
             )
         try:
             state = _json_object(inspected.stdout, context="Docker container state")
         except SandboxUnavailableError as error:
-            return _infrastructure_result(
-                request,
-                container_id=container_id,
-                image_id=image_id,
-                stdout=capture.stdout,
-                stderr=capture.stderr,
-                diagnostic=str(error),
+            return _pre_cleanup_error(
+                _infrastructure_result(
+                    request,
+                    container_id=container_id,
+                    image_id=image_id,
+                    stdout=capture.stdout,
+                    stderr=capture.stderr,
+                    diagnostic=str(error),
+                ),
+                capture=capture,
             )
         exit_code = state.get("ExitCode")
         oom_killed = state.get("OOMKilled")
@@ -462,23 +576,37 @@ class DockerSandbox:
             or not isinstance(running, bool)
             or not isinstance(state_error, str)
         ):
-            return _infrastructure_result(
-                request,
-                container_id=container_id,
-                image_id=image_id,
-                stdout=capture.stdout,
-                stderr=capture.stderr,
-                diagnostic="Docker returned malformed container state",
+            return _pre_cleanup_error(
+                _infrastructure_result(
+                    request,
+                    container_id=container_id,
+                    image_id=image_id,
+                    stdout=capture.stdout,
+                    stderr=capture.stderr,
+                    diagnostic="Docker returned malformed container state",
+                ),
+                capture=capture,
             )
+        normalized_state = DockerContainerState(
+            exit_code=exit_code,
+            oom_killed=oom_killed,
+            running=running,
+            error=state_error,
+        )
         if running or state_error:
             state_diagnostic = state_error or "container remained running after attached execution"
-            return _infrastructure_result(
-                request,
-                container_id=container_id,
-                image_id=image_id,
-                stdout=capture.stdout,
-                stderr=capture.stderr,
-                diagnostic=state_diagnostic,
+            return _PreCleanupRun(
+                result=_infrastructure_result(
+                    request,
+                    container_id=container_id,
+                    image_id=image_id,
+                    stdout=capture.stdout,
+                    stderr=capture.stderr,
+                    diagnostic=state_diagnostic,
+                ),
+                state=normalized_state,
+                termination_trigger=capture.termination,
+                kill=capture.kill,
             )
 
         if capture.termination is not None:
@@ -487,17 +615,21 @@ class DockerSandbox:
             status = SandboxStatus.OOM_KILLED
         else:
             status = SandboxStatus.EXITED
-        termination_diagnostic = capture.termination_diagnostic
-        return SandboxResult(
-            execution_id=request.execution_id,
-            status=status,
-            exit_code=exit_code,
-            stdout=capture.stdout,
-            stderr=capture.stderr,
-            output_truncated=capture.termination is SandboxStatus.OUTPUT_EXHAUSTED,
-            container_id=container_id,
-            image_id=image_id,
-            diagnostic=termination_diagnostic,
+        return _PreCleanupRun(
+            result=SandboxResult(
+                execution_id=request.execution_id,
+                status=status,
+                exit_code=exit_code,
+                stdout=capture.stdout,
+                stderr=capture.stderr,
+                output_truncated=capture.termination is SandboxStatus.OUTPUT_EXHAUSTED,
+                container_id=container_id,
+                image_id=image_id,
+                diagnostic=capture.kill.diagnostic,
+            ),
+            state=normalized_state,
+            termination_trigger=capture.termination,
+            kill=capture.kill,
         )
 
     def _capture_attached(
@@ -519,13 +651,13 @@ class DockerSandbox:
 
         deadline = time.monotonic() + request.limits.wall_time_seconds
         termination: SandboxStatus | None = None
-        termination_diagnostic: str | None = None
+        kill = _no_kill_evidence()
         try:
             while selector.get_map() or process.poll() is None:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     termination = SandboxStatus.TIMED_OUT
-                    termination_diagnostic = self._kill_container(container_id)
+                    kill = self._kill_container(container_id)
                     break
                 for key, _ in selector.select(timeout=min(remaining, 0.05)):
                     try:
@@ -537,7 +669,7 @@ class DockerSandbox:
                         if capture.exhausted:
                             termination = SandboxStatus.OUTPUT_EXHAUSTED
                             if process.poll() is None:
-                                termination_diagnostic = self._kill_container(container_id)
+                                kill = self._kill_container(container_id)
                             break
                     else:
                         selector.unregister(key.fileobj)
@@ -560,35 +692,85 @@ class DockerSandbox:
             stdout=bytes(capture.stdout),
             stderr=bytes(capture.stderr),
             termination=termination,
-            termination_diagnostic=termination_diagnostic,
+            kill=kill,
         )
 
-    def _kill_container(self, container_id: str) -> str | None:
+    def _kill_container(self, container_id: str) -> DockerKillEvidence:
         try:
             completed = self._runner.run(
                 [self.docker_executable, "kill", container_id],
                 timeout=_CONTROL_TIMEOUT_SECONDS,
             )
         except (OSError, subprocess.TimeoutExpired) as error:
-            return str(error)
+            return DockerKillEvidence(attempted=True, succeeded=False, diagnostic=str(error))
         if completed.returncode != 0:
             diagnostic = _diagnostic(completed)
             if "is not running" in diagnostic.lower():
-                return None
-            return diagnostic
-        return None
+                return DockerKillEvidence(attempted=True, succeeded=True)
+            return DockerKillEvidence(
+                attempted=True,
+                succeeded=False,
+                diagnostic=diagnostic,
+            )
+        return DockerKillEvidence(attempted=True, succeeded=True)
 
-    def _remove_container(self, target: str) -> str | None:
+    def _cleanup_container(
+        self,
+        target: str,
+        *,
+        verify_absence: bool,
+    ) -> DockerCleanupEvidence:
         try:
             completed = self._runner.run(
                 [self.docker_executable, "rm", "--force", target],
                 timeout=_CONTROL_TIMEOUT_SECONDS,
             )
         except (OSError, subprocess.TimeoutExpired) as error:
-            return str(error)
-        if completed.returncode != 0:
-            return _diagnostic(completed)
-        return None
+            return DockerCleanupEvidence(
+                target=target,
+                removal_attempted=True,
+                removal_succeeded=False,
+                absence_checked=False,
+                absent=None,
+                diagnostic=str(error),
+            )
+        removal_succeeded = completed.returncode == 0
+        removal_diagnostic = None if removal_succeeded else _diagnostic(completed)
+        if not verify_absence:
+            return DockerCleanupEvidence(
+                target=target,
+                removal_attempted=True,
+                removal_succeeded=removal_succeeded,
+                absence_checked=False,
+                absent=None,
+                diagnostic=removal_diagnostic,
+            )
+        absent, absence_diagnostic = self._container_is_absent(target)
+        diagnostic = removal_diagnostic or absence_diagnostic
+        return DockerCleanupEvidence(
+            target=target,
+            removal_attempted=True,
+            removal_succeeded=removal_succeeded,
+            absence_checked=True,
+            absent=absent,
+            diagnostic=diagnostic,
+        )
+
+    def _container_is_absent(self, target: str) -> tuple[bool | None, str | None]:
+        try:
+            completed = self._runner.run(
+                [self.docker_executable, "container", "inspect", target],
+                timeout=_CONTROL_TIMEOUT_SECONDS,
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            return None, str(error)
+        if completed.returncode == 0:
+            return False, "container remained present after removal"
+        diagnostic = _diagnostic(completed)
+        lowered = diagnostic.lower()
+        if "no such container" in lowered or "no such object" in lowered:
+            return True, None
+        return None, f"cannot verify container absence: {diagnostic}"
 
     def _control(
         self,
@@ -631,6 +813,52 @@ def _container_name(execution_id: str, suffix: str) -> str:
 
 def _format_number(value: float) -> str:
     return format(value, ".15g")
+
+
+def _no_kill_evidence() -> DockerKillEvidence:
+    return DockerKillEvidence(attempted=False, succeeded=None)
+
+
+def _no_cleanup_evidence() -> DockerCleanupEvidence:
+    return DockerCleanupEvidence(
+        target=None,
+        removal_attempted=False,
+        removal_succeeded=None,
+        absence_checked=False,
+        absent=None,
+    )
+
+
+def _observed_without_container(
+    result: SandboxResult,
+    *,
+    image_id: str | None,
+) -> ObservedSandboxRun:
+    return ObservedSandboxRun(
+        result=result,
+        evidence=DockerExecutionEvidence(
+            container_id=None,
+            image_id=image_id,
+            state=None,
+            termination_trigger=None,
+            kill=_no_kill_evidence(),
+            cleanup=_no_cleanup_evidence(),
+            pre_cleanup_status=result.status,
+        ),
+    )
+
+
+def _pre_cleanup_error(
+    result: SandboxResult,
+    *,
+    capture: _CaptureResult | None = None,
+) -> _PreCleanupRun:
+    return _PreCleanupRun(
+        result=result,
+        state=None,
+        termination_trigger=None if capture is None else capture.termination,
+        kill=_no_kill_evidence() if capture is None else capture.kill,
+    )
 
 
 def _infrastructure_result(

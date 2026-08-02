@@ -10,6 +10,8 @@ from typing import BinaryIO
 import pytest
 
 from guildmind.sandbox import (
+    DockerCleanupEvidence,
+    DockerContainerState,
     DockerHostPolicy,
     DockerSandbox,
     SandboxConfigurationError,
@@ -140,6 +142,8 @@ class FakeDockerRunner:
         kill_returncode: int = 0,
         kill_stderr: bytes = b"",
         remove_returncode: int = 0,
+        absence_returncode: int | None = None,
+        absence_stderr: bytes | None = None,
     ) -> None:
         self.info = info or reference_docker_info()
         self.image = image or inspected_image()
@@ -157,6 +161,9 @@ class FakeDockerRunner:
         self.kill_returncode = kill_returncode
         self.kill_stderr = kill_stderr
         self.remove_returncode = remove_returncode
+        self.absence_returncode = absence_returncode
+        self.absence_stderr = absence_stderr
+        self.removed = False
         self.calls: list[tuple[str, ...]] = []
         self.process: FakeAttachedProcess | None = None
 
@@ -180,6 +187,21 @@ class FakeDockerRunner:
                 stdout=self.create_stdout,
                 stderr=b"create rejected" if self.create_returncode else b"",
             )
+        if command[1:3] == ("container", "inspect"):
+            returncode = (
+                self.absence_returncode
+                if self.absence_returncode is not None
+                else (1 if self.removed else 0)
+            )
+            stderr = self.absence_stderr
+            if stderr is None and returncode != 0:
+                stderr = b"Error response from daemon: No such container"
+            return _completed(
+                command,
+                returncode=returncode,
+                stdout=b"[]" if returncode == 0 else b"",
+                stderr=stderr or b"",
+            )
         if command[1] == "inspect":
             return _completed(command, stdout=json.dumps(self.state).encode())
         if command[1] == "kill":
@@ -189,6 +211,8 @@ class FakeDockerRunner:
                 stderr=self.kill_stderr,
             )
         if command[1] == "rm":
+            if self.remove_returncode == 0:
+                self.removed = True
             return _completed(
                 command,
                 returncode=self.remove_returncode,
@@ -397,7 +421,8 @@ def test_docker_create_uses_the_exact_mandatory_security_contract(tmp_path: Path
     )
     assert ("docker", "start", "--attach", CONTAINER_ID) in runner.calls
     assert ("docker", "inspect", "--format={{json .State}}", CONTAINER_ID) in runner.calls
-    assert runner.calls[-1] == ("docker", "rm", "--force", CONTAINER_ID)
+    assert ("docker", "rm", "--force", CONTAINER_ID) in runner.calls
+    assert runner.calls[-1] == ("docker", "container", "inspect", CONTAINER_ID)
 
 
 def test_repeated_execution_ids_receive_unique_container_names(tmp_path: Path) -> None:
@@ -501,7 +526,8 @@ def test_combined_output_cap_kills_and_classifies_execution(tmp_path: Path) -> N
     assert result.diagnostic is None
     assert len(result.stdout) + len(result.stderr) == 10
     assert ("docker", "kill", CONTAINER_ID) in runner.calls
-    assert runner.calls[-1] == ("docker", "rm", "--force", CONTAINER_ID)
+    assert ("docker", "rm", "--force", CONTAINER_ID) in runner.calls
+    assert runner.calls[-1] == ("docker", "container", "inspect", CONTAINER_ID)
 
 
 def test_wall_timeout_kills_and_classifies_execution(tmp_path: Path) -> None:
@@ -533,6 +559,59 @@ def test_inspected_oom_state_overrides_process_exit_classification(tmp_path: Pat
 
     assert result.status is SandboxStatus.OOM_KILLED
     assert result.exit_code == 137
+
+
+def test_observed_run_preserves_state_kill_and_verified_cleanup(tmp_path: Path) -> None:
+    source = (tmp_path / "source").resolve()
+    source.mkdir()
+    runner = FakeDockerRunner(
+        process_running=True,
+        state={"Error": "", "ExitCode": 137, "OOMKilled": False, "Running": False},
+    )
+
+    observed = DockerSandbox(command_runner=runner).run_observed(
+        request(source, selected_limits=limits(wall_time_seconds=0.001))
+    )
+
+    assert observed.result.status is SandboxStatus.TIMED_OUT
+    assert observed.evidence.pre_cleanup_status is SandboxStatus.TIMED_OUT
+    assert observed.evidence.state == DockerContainerState(
+        exit_code=137,
+        oom_killed=False,
+        running=False,
+        error="",
+    )
+    assert observed.evidence.termination_trigger is SandboxStatus.TIMED_OUT
+    assert observed.evidence.kill.attempted
+    assert observed.evidence.kill.succeeded is True
+    assert observed.evidence.cleanup == DockerCleanupEvidence(
+        target=CONTAINER_ID,
+        removal_attempted=True,
+        removal_succeeded=True,
+        absence_checked=True,
+        absent=True,
+    )
+
+
+def test_cleanup_absence_ambiguity_invalidates_result_but_retains_prior_status(
+    tmp_path: Path,
+) -> None:
+    source = (tmp_path / "source").resolve()
+    source.mkdir()
+    runner = FakeDockerRunner(
+        absence_returncode=1,
+        absence_stderr=b"cannot connect to Docker daemon",
+    )
+
+    observed = DockerSandbox(command_runner=runner).run_observed(request(source))
+
+    assert observed.result.status is SandboxStatus.INFRASTRUCTURE_ERROR
+    assert observed.evidence.pre_cleanup_status is SandboxStatus.EXITED
+    assert observed.evidence.cleanup.removal_succeeded is True
+    assert observed.evidence.cleanup.absence_checked
+    assert observed.evidence.cleanup.absent is None
+    assert observed.evidence.cleanup.diagnostic is not None
+    assert "cannot verify container absence" in observed.evidence.cleanup.diagnostic
 
 
 def test_create_failure_is_typed_and_does_not_attempt_container_cleanup(tmp_path: Path) -> None:

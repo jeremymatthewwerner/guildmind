@@ -15,10 +15,15 @@ from guildmind.sandbox.base import (
     SandboxUnavailableError,
 )
 from guildmind.sandbox.docker import (
+    DockerCleanupEvidence,
+    DockerContainerState,
+    DockerExecutionEvidence,
     DockerHostAssessment,
     DockerHostMode,
     DockerHostPolicy,
+    DockerKillEvidence,
     DockerSandbox,
+    ObservedSandboxRun,
     assess_docker_info,
 )
 from guildmind.sandbox.local import (
@@ -32,10 +37,15 @@ from guildmind.sandbox.local import (
 from guildmind.sandbox.selftest import SandboxSelfTestReport, run_sandbox_self_test
 
 __all__ = [
+    "DockerCleanupEvidence",
+    "DockerContainerState",
+    "DockerExecutionEvidence",
     "DockerHostAssessment",
     "DockerHostMode",
     "DockerHostPolicy",
+    "DockerKillEvidence",
     "DockerSandbox",
+    "ObservedSandboxRun",
     "PatchApplyError",
     "PatchPolicy",
     "PatchValidationError",
