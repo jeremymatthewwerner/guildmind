@@ -35,6 +35,12 @@ Startup verifies migration state, SQLite integrity, run-state transitions, artif
 
 Move to PostgreSQL/object storage only when measured concurrent worker demand requires distributed leases or the local durability/throughput envelope is insufficient. That migration requires a new ADR and evidence-preserving import checks.
 
+### 2026-08-02 implementation checkpoint
+
+The [real-process recovery suite](../evidence/crash-recovery/2026-08-02-process-sigkill/README.md) partially exercises this decision. A spawned child announces an exact durable or pre-`COMMIT` boundary over a pipe and is then killed by its parent with `SIGKILL`. Five EventStore cases cover committed prefixes from run creation through successful evaluation; four cases block the commit after response, evaluation, or either recovery transaction has executed its SQL body; two FixtureRunner cases kill the process from inside model and evaluator work after the preceding persistence phase has committed. A newly opened store passes SQLite integrity and foreign-key checks, preserves or restores the exact prefix, applies conservative budget semantics, creates at most one terminal event, replays to the manifest state, and treats a second recovery as an exact no-op. Referenced CAS bytes present at those boundaries are verified in the tests.
+
+The pre-commit response case observes one finalized, unreferenced patch after rollback; the evaluation case observes three finalized, unreferenced evaluation blobs; neither recovery rollback creates a new orphan. Recovery does not infer any orphan into the manifest. This is a test-owned inventory, not the automatic audit required by this ADR. The suite still has no kill during the CAS temp-write/`fsync`/rename/directory-`fsync` sequence or in a concurrent writer race. Automatic startup verification of all referenced bytes, orphan reporting/quarantine, writer-exclusion stress, and real-provider idempotency remain unimplemented. The normative startup and acceptance language above and below therefore remains a target, not a statement that the complete boundary has passed.
+
 ## Consequences
 
 The initial system is operationally small and supports atomic evidence updates. A single writer limits write throughput by design; evaluation workers may run concurrently while their result messages serialize at commitment. The artifact directory and SQLite database must be backed up and restored as one evidence set.

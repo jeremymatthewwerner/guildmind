@@ -94,6 +94,9 @@ Guildmind now has its first deterministic local vertical slice. It can:
 - validate and export versioned task, experiment, run, event, budget, artifact, and evaluation schemas;
 - reserve aggregate budget before model work and reconcile reported usage afterward;
 - store immutable artifacts by content hash and hash-link events in a single-writer SQLite ledger;
+- recover run state after a real process is killed at committed lifecycle, selected
+  pre-commit, or model/evaluator in-flight boundaries, producing one replay-valid
+  terminal state with conservative budget treatment;
 - run a scripted fake model against a repository-owned coding fixture;
 - validate and apply a constrained patch to a copied workspace;
 - execute trusted local tests or a two-phase black-box container evaluation;
@@ -101,7 +104,7 @@ Guildmind now has its first deterministic local vertical slice. It can:
   environment, credential, and network/socket boundaries with versioned evidence; and
 - verify the event chain, reconstruct terminal state, and compare normalized semantic digests across runs.
 
-The current Stage 1 hardening checkpoint adds a restricted Docker invocation contract, a pinned image-owned two-phase evaluator, and crash recovery that closes an abandoned nonterminal run with explicit terminal evidence. These are development controls and contract tests, not a claim that hostile-code containment has passed.
+The current Stage 1 hardening checkpoint adds a restricted Docker invocation contract, a pinned image-owned two-phase evaluator, and crash recovery that closes an abandoned nonterminal run with explicit terminal evidence. Eleven real-process tests now use pipe-synchronized boundaries and `SIGKILL` to cover five post-commit EventStore prefixes, four selected pre-commit rollback points, and the model-in-flight and evaluator-in-flight FixtureRunner boundaries. These are development controls and bounded process tests, not a claim that CAS-write/orphan handling, concurrency, or hostile-code containment has passed.
 
 The implemented path is:
 
@@ -114,7 +117,7 @@ fixture task → fake model → validated patch → copied workspace
 
 This is engineering infrastructure for trusted repository-owned fixtures, not yet a hostile-code sandbox. Evaluator v2 closes the demonstrated same-interpreter false pass for the first fixture: candidate code receives only a patched workspace and expected-value-free JSON challenge, while a fresh scorer container receives the sealed oracle and bounded candidate response but no candidate workspace. Manifest, source, test, and oracle bytes are frozen before model dispatch; the trusted completion binds that frozen identity, and exact bounded candidate/scorer transcripts survive as content-addressed evidence. A strict [adversarial corpus](docs/adversarial-corpus.md) content-addresses 19 patch-intake, functional, boundary-integrity, timeout, output-exhaustion, and OOM cases with exact predeclared outcomes. Nine unsafe shapes now fail before Git application or sandbox dispatch; the other ten cases pass under live development evaluation.
 
-That boundary is deliberately narrow. It covers JSON-callable micro-fixtures, candidate code necessarily observes the call inputs, and it is not a general pytest or arbitrary-repository evaluator. The reproducibly built image ran successfully under the declared restrictions on Docker Desktop, including direct OOM, PID-ceiling, exact writable-space, high-entropy planted-secret, mount/environment, credential, DNS/TCP, host-route, and Unix-socket probes. Both evaluator phases were contained in three repeated reports with verified cleanup. That rootful ARM Linux virtual machine is not the required rootless x86_64 reference host, however, and the probe covers evaluator candidate/scorer requests rather than a not-yet-built general worker dispatcher. External tasks and real model-generated commands remain blocked until the checked-in gold/attack matrix and direct probes pass on the reference host and the process-kill recovery and 99% normal-fixture reliability campaigns are complete. The [Stage 1 hardening gate report](docs/reviews/2026-08-01-stage-1-hardening-gate.md) records the exact evidence and retains a **NOT PASSED** verdict; [ADR 0004](docs/decisions/0004-two-phase-python-call-evaluator.md) records the v2 boundary and its limits.
+That boundary is deliberately narrow. It covers JSON-callable micro-fixtures, candidate code necessarily observes the call inputs, and it is not a general pytest or arbitrary-repository evaluator. The reproducibly built image ran successfully under the declared restrictions on Docker Desktop, including direct OOM, PID-ceiling, exact writable-space, high-entropy planted-secret, mount/environment, credential, DNS/TCP, host-route, and Unix-socket probes. Both evaluator phases were contained in three repeated reports with verified cleanup. That rootful ARM Linux virtual machine is not the required rootless x86_64 reference host, however, and the probe covers evaluator candidate/scorer requests rather than a not-yet-built general worker dispatcher. The process-kill slice proves committed-prefix recovery, rollback at four mutation-rich pre-commit points, and the two external-work boundaries. It also observes the exact finalized orphan blobs left when response or evaluation references roll back; automatic startup verification, orphan reporting/quarantine, CAS-write kill points, writer races, and real-provider idempotency remain open. External tasks and real model-generated commands remain blocked until the checked-in gold/attack matrix and direct probes pass on the reference host and the remaining crash/CAS work and 99% normal-fixture reliability campaign are complete. The [Stage 1 hardening gate report](docs/reviews/2026-08-01-stage-1-hardening-gate.md) records the exact evidence and retains a **NOT PASSED** verdict; [ADR 0004](docs/decisions/0004-two-phase-python-call-evaluator.md) records the v2 boundary and its limits.
 
 Experiment 0001 also remains a draft until its worker model, spend ceilings, minimum relevant effect, and publication level are approved. Until both that Stage 0 approval and the Stage 1 boundary gate exist, the next work remains fixture hardening—not provider-backed pilots, baselines, genomes, or search.
 
@@ -166,7 +169,7 @@ clean Git revision; development evidence cannot be promoted by relabeling it.
 Use `--output <new-file.json>` to preserve canonical evidence; the command refuses to
 overwrite an existing report.
 
-`guildmind doctor` reports the trusted local fixture path separately from whether the configured Docker host/image passes the production sandbox probe. That probe is necessary but is not the Stage 1 gate: it does not certify evaluator discrimination, recovery campaigns, or fixture reliability. Generated run artifacts remain outside Git by default.
+`guildmind doctor` reports the trusted local fixture path separately from whether the configured Docker host/image passes the production sandbox probe. That probe is necessary but is not the Stage 1 gate: it does not certify evaluator discrimination, complete transaction/CAS recovery, or fixture reliability. Generated run artifacts remain outside Git by default.
 
 ## Project documents
 
@@ -178,6 +181,7 @@ overwrite an existing report.
 - [Unsafe-patch intake evidence](docs/evidence/patch-intake/2026-08-02-development/README.md): the nine-case pre-application matrix, parser hardening, hashes, and evidence limits.
 - [Resource-probe evidence](docs/evidence/resource-probes/2026-08-02-docker-desktop/README.md): three canonical development reports for OOM, PID, writable-byte, and cleanup enforcement.
 - [Containment-probe evidence](docs/evidence/containment-probes/2026-08-02-docker-desktop/README.md): three canonical evaluator candidate/scorer reports for planted-secret, mount/environment, credential, network/socket, privilege, and cleanup boundaries.
+- [Real-process crash-recovery evidence](docs/evidence/crash-recovery/2026-08-02-process-sigkill/README.md): eleven synchronized `SIGKILL` cases across committed lifecycle, selected pre-commit, and runner external-work boundaries, with exact rollback/orphan observations and remaining gaps.
 - [Architecture decisions](docs/decisions/): the Python environment, evidence storage, and sandbox/evaluator boundary.
 - [Plan review ledger](docs/reviews/2026-07-31-plan-audit.md): durable dispositions for the benchmark, runtime, and search/evaluation review findings.
 - [Stage 1 hardening gate](docs/reviews/2026-08-01-stage-1-hardening-gate.md): implemented development controls, smoke evidence, remaining adversarial matrix, reference-host procedure, and current verdict.
