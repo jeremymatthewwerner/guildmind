@@ -25,12 +25,27 @@ The functional controls also run through the trusted local evaluator. A separate
 
 Neither path falls back to the other. A passing development run is convenience evidence from that host, not reference verification. A pytest result is also not the final reference evidence package: the authoritative runner must emit a machine-readable record keyed by corpus-manifest hash, case ID, patch SHA-256, image digest and ID, host assessment, observed outcome, transcript artifact references, and cleanup result.
 
-## Deliberate next slice
+## Resource-probe boundary
 
-Memory, PID, and disk attacks are not assigned premature evaluator outcomes in this manifest. Their enforcement semantics need direct reference-host probes first:
+Memory, PID, and disk attacks were initially withheld from this manifest rather than
+assigned outcomes from configured Docker flags. Guildmind now has a fixed image-owned
+probe and a strict `guildmind.resource-probe-evidence/v1` record that separates
+configuration, active enforcement, cleanup, development/reference tier, and evaluator
+status.
 
-- memory must distinguish Docker's `OOMKilled` state from a catchable Python `MemoryError` or host wall timeout;
-- PID enforcement must record `pids.events` and `EAGAIN`, because a generic fork-bomb timeout does not prove which limit fired;
-- disk must demonstrate a real hard writable-byte quota and `ENOSPC`, not merely a configured tmpfs size.
+Three repeated Docker Desktop runs produced the same development verdicts and are
+preserved in the [2026-08-02 evidence bundle](evidence/resource-probes/2026-08-02-docker-desktop/README.md):
 
-Once those probes produce stable evidence on the required rootless x86_64 Linux host, their checked-in patches and exact classifications can be added to the same closed manifest.
+- memory ended with Docker `OOMKilled=true`, exit 137, and Guildmind `oom_killed`;
+- PID pressure reached `pids.max`, the next bounded fork returned Linux `EAGAIN`, both
+  available max-event counters incremented, and every child was reaped; and
+- `/workspace` and `/tmp` accepted exactly their declared byte ceilings, then returned
+  Linux `ENOSPC`, reported zero free bytes, and recovered after unlink.
+
+Every report says `all_enforced=true` but `reference_passed=false`, because Docker
+Desktop is a rootful ARM development environment. The OOM observation is sufficiently
+stable to add a development evaluator corpus case with candidate `oom_killed` and no
+scorer. PID and disk remain direct probes: Docker exposes no matching typed evaluator
+status, so a timeout or ordinary failed response cannot honestly be relabeled PID or
+disk exhaustion. All cases still require repetition on the rootless native x86_64
+reference host before they contribute to the authoritative Stage 1 verdict.

@@ -207,12 +207,21 @@ class _FakeProbeReport:
             "schema_version": "guildmind.resource-probe-evidence/v1",
         }
 
+    def canonical_bytes(self) -> bytes:
+        return json.dumps(
+            self.model_dump(mode="json"),
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode()
+
 
 def test_resource_probe_labels_development_evidence_and_uses_fixed_runner(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
 ) -> None:
     captured: dict[str, object] = {}
+    output = tmp_path / "resource-evidence.json"
 
     class FakeProbeSandbox:
         def __init__(self, *, host_policy: object) -> None:
@@ -235,6 +244,8 @@ def test_resource_probe_labels_development_evidence_and_uses_fixed_runner(
             f"guildmind/evaluator@sha256:{'a' * 64}",
             "--probe-id",
             "probe-123",
+            "--output",
+            str(output),
         ]
     )
 
@@ -246,3 +257,39 @@ def test_resource_probe_labels_development_evidence_and_uses_fixed_runner(
     host_policy = captured["host_policy"]
     assert isinstance(host_policy, DockerHostPolicy)
     assert host_policy.mode is DockerHostMode.DEVELOPMENT_ONLY
+    assert output.read_bytes() == _FakeProbeReport().canonical_bytes() + b"\n"
+
+
+def test_resource_probe_never_overwrites_existing_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "resource-evidence.json"
+    output.write_text("preserve", encoding="utf-8")
+
+    class FakeProbeSandbox:
+        def __init__(self, *, host_policy: object) -> None:
+            del host_policy
+
+    monkeypatch.setattr("guildmind.cli.DockerSandbox", FakeProbeSandbox)
+    monkeypatch.setattr(
+        "guildmind.cli.run_resource_probe_suite",
+        lambda *args, **kwargs: _FakeProbeReport(),
+    )
+
+    exit_code = main(
+        [
+            "probe-resources",
+            "--development",
+            "--evaluator-image",
+            f"guildmind/evaluator@sha256:{'a' * 64}",
+            "--output",
+            str(output),
+        ]
+    )
+
+    response = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert response["schema_version"] == "guildmind.resource-probe-error/v1"
+    assert output.read_text(encoding="utf-8") == "preserve"

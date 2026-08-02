@@ -159,6 +159,8 @@ uv run guildmind probe-resources --development \
 The resulting `all_enforced` value describes that development host only.
 `reference_passed` additionally requires the strict rootless x86_64 host policy and a
 clean Git revision; development evidence cannot be promoted by relabeling it.
+Use `--output <new-file.json>` to preserve canonical evidence; the command refuses to
+overwrite an existing report.
 
 `guildmind doctor` reports the trusted local fixture path separately from whether the configured Docker host/image passes the production sandbox probe. That probe is necessary but is not the Stage 1 gate: it does not certify evaluator discrimination, recovery campaigns, or fixture reliability. Generated run artifacts remain outside Git by default.
 
@@ -168,7 +170,8 @@ clean Git revision; development evidence cannot be promoted by relabeling it.
 - [Staged build plan](docs/build-plan.md): the architecture, benchmark ladder, statistical design, stage gates, implementation roadmap, costs, and first-month backlog.
 - [Experiment 0001 contract](docs/experiments/0001-institutional-search.md): the pilot protocol, claims, task partitions, budget semantics, lockbox rules, and open owner decisions.
 - [Threat model](docs/threat-model.md): assets, trust boundaries, threats, controls, and release gates.
-- [Adversarial evaluator corpus](docs/adversarial-corpus.md): manifest invariants, exact attack outcomes, evidence levels, and the next resource probes.
+- [Adversarial evaluator corpus](docs/adversarial-corpus.md): manifest invariants, exact attack outcomes, evidence levels, and the resource-classification boundary.
+- [Resource-probe evidence](docs/evidence/resource-probes/2026-08-02-docker-desktop/README.md): three canonical development reports for OOM, PID, writable-byte, and cleanup enforcement.
 - [Architecture decisions](docs/decisions/): the Python environment, evidence storage, and sandbox/evaluator boundary.
 - [Plan review ledger](docs/reviews/2026-07-31-plan-audit.md): durable dispositions for the benchmark, runtime, and search/evaluation review findings.
 - [Stage 1 hardening gate](docs/reviews/2026-08-01-stage-1-hardening-gate.md): implemented development controls, smoke evidence, remaining adversarial matrix, reference-host procedure, and current verdict.

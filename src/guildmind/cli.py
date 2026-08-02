@@ -78,6 +78,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="stable evidence identifier (a random identifier is generated when omitted)",
     )
+    resource_probe.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="write canonical evidence to a new file without overwriting existing evidence",
+    )
     resource_probe.set_defaults(handler=_probe_resources)
 
     run = subcommands.add_parser("run", help="run the scripted deterministic fixture")
@@ -227,6 +233,24 @@ def _probe_resources(arguments: argparse.Namespace) -> int:
             }
         )
         return 1
+    if arguments.output is not None:
+        if os.path.lexists(arguments.output):
+            _print_json(
+                {
+                    "error": f"resource probe evidence already exists: {arguments.output}",
+                    "schema_version": "guildmind.resource-probe-error/v1",
+                }
+            )
+            return 1
+        if not arguments.output.parent.is_dir():
+            _print_json(
+                {
+                    "error": f"resource probe evidence directory is unavailable: "
+                    f"{arguments.output.parent}",
+                    "schema_version": "guildmind.resource-probe-error/v1",
+                }
+            )
+            return 1
     policy = DockerHostPolicy.development_only() if arguments.development else DockerHostPolicy()
     sandbox = DockerSandbox(host_policy=policy)
     try:
@@ -244,6 +268,18 @@ def _probe_resources(arguments: argparse.Namespace) -> int:
             }
         )
         return 1
+    if arguments.output is not None:
+        try:
+            with arguments.output.open("xb") as stream:
+                stream.write(report.canonical_bytes() + b"\n")
+        except OSError as error:
+            _print_json(
+                {
+                    "error": f"cannot write resource probe evidence: {error}",
+                    "schema_version": "guildmind.resource-probe-error/v1",
+                }
+            )
+            return 1
     _print_json(report.model_dump(mode="json"))
     passed = report.all_enforced if arguments.development else report.reference_passed
     return 0 if passed else 1
