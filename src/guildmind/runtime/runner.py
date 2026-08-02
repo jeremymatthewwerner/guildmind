@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import stat
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,7 +22,7 @@ from guildmind.runtime.budget import BudgetAuthority, BudgetExceededError
 from guildmind.runtime.clock import Clock, SystemClock
 from guildmind.runtime.fixture import materialize_fixture_task
 from guildmind.runtime.replay import ReplayState, replay_events, semantic_digest
-from guildmind.storage import EventStore, FileArtifactStore
+from guildmind.storage import ArtifactCorruptionError, EventStore, FileArtifactStore
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,8 +47,8 @@ class FixtureRunner:
         clock: Clock | None = None,
         evaluator: Evaluator | None = None,
     ) -> None:
-        self.state_directory = state_directory.resolve()
-        self.state_directory.mkdir(parents=True, exist_ok=True)
+        self.state_directory = _prepare_state_directory(state_directory)
+        self._state_directory_identity = _directory_identity(self.state_directory)
         self.clock = clock or SystemClock()
         self.evaluator = evaluator or LocalEvaluator()
 
@@ -62,9 +64,13 @@ class FixtureRunner:
         seed: int = 0,
         budget_limits: BudgetLimits | None = None,
     ) -> FixtureRunResult:
+        self._verify_state_directory_identity()
         artifact_root = self.state_directory / "artifacts"
         database_path = self.state_directory / "runs.db"
-        artifact_store = FileArtifactStore(artifact_root)
+        artifact_store = FileArtifactStore(
+            artifact_root,
+            trusted_base=self.state_directory.parent,
+        )
         task, local_spec, problem_statement = materialize_fixture_task(
             fixture_root.resolve(),
             artifact_store,
@@ -237,11 +243,18 @@ class FixtureRunner:
     def recover(self, run_id: str) -> RunManifest:
         """Explicitly terminalize a previously interrupted run without retrying it."""
 
+        self._verify_state_directory_identity()
         database_path = self.state_directory / "runs.db"
         with EventStore(database_path, clock=self.clock) as event_store:
             return event_store.recover_run(
                 run_id,
                 finished_at=self.clock.stamp().occurred_at,
+            )
+
+    def _verify_state_directory_identity(self) -> None:
+        if _directory_identity(self.state_directory) != self._state_directory_identity:
+            raise ArtifactCorruptionError(
+                f"state directory {self.state_directory} changed after runner initialization"
             )
 
 
@@ -253,3 +266,39 @@ def _terminal_status(status: EvaluationStatus) -> RunStatus:
     if status is EvaluationStatus.INFRASTRUCTURE_ERROR:
         return RunStatus.INFRASTRUCTURE_ERROR
     return RunStatus.FAILED
+
+
+def _prepare_state_directory(configured: Path) -> Path:
+    """Create the configured directory below its trusted immediate parent."""
+
+    lexical = Path(os.path.abspath(configured))
+    if lexical == Path(lexical.anchor):
+        raise ValueError("state directory cannot be a filesystem root")
+    physical = lexical.parent.resolve(strict=False) / lexical.name
+    try:
+        physical.mkdir(parents=True)
+    except FileExistsError:
+        pass
+    except OSError as error:
+        raise ArtifactCorruptionError(
+            f"state directory {physical} could not be created safely"
+        ) from error
+    try:
+        metadata = os.lstat(physical)
+    except OSError as error:
+        raise ArtifactCorruptionError(
+            f"state directory {physical} could not be inspected"
+        ) from error
+    if not stat.S_ISDIR(metadata.st_mode):
+        raise ArtifactCorruptionError(f"state directory {physical} is not a real directory")
+    return physical
+
+
+def _directory_identity(path: Path) -> tuple[int, int]:
+    try:
+        metadata = os.lstat(path)
+    except OSError as error:
+        raise ArtifactCorruptionError(f"state directory {path} could not be inspected") from error
+    if not stat.S_ISDIR(metadata.st_mode):
+        raise ArtifactCorruptionError(f"state directory {path} is not a real directory")
+    return metadata.st_dev, metadata.st_ino

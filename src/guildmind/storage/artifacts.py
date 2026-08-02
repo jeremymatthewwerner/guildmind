@@ -22,13 +22,28 @@ class FileArtifactStore:
     A blob is flushed, verified, and atomically linked into its canonical path before
     its reference is returned. The caller can therefore commit the reference to SQLite
     only after the bytes exist, without any publisher replacing an existing blob.
+
+    ``trusted_base`` defines the already-trusted path boundary. Symlinks in that base
+    (including standard operating-system aliases) are resolved once; every component
+    from the base to ``root`` is then created and inspected without following links.
+    When omitted, the configured root's immediate parent is the trusted boundary.
     """
 
-    def __init__(self, root: Path) -> None:
-        self.root = root.resolve()
-        if self.root == Path(self.root.anchor):
+    def __init__(self, root: Path, *, trusted_base: Path | None = None) -> None:
+        configured_root = Path(os.path.abspath(root))
+        if configured_root == Path(configured_root.anchor):
             raise ValueError("artifact store root cannot be a filesystem root")
-        self.root.mkdir(parents=True, exist_ok=True)
+        configured_base = Path(
+            os.path.abspath(trusted_base if trusted_base is not None else configured_root.parent)
+        )
+        try:
+            relative_root = configured_root.relative_to(configured_base)
+        except ValueError as error:
+            raise ValueError("artifact store root must be below its trusted base") from error
+        if not relative_root.parts:
+            raise ValueError("artifact store root must be below its trusted base")
+        self.root = configured_base.resolve(strict=False).joinpath(relative_root)
+        self._create_directory_chain(self.root)
         self._directory_identities = self._snapshot_directory_chain(self.root)
 
     def put_bytes(self, data: bytes, *, media_type: str) -> ArtifactRef:
@@ -68,6 +83,11 @@ class FileArtifactStore:
             raise ArtifactCorruptionError("artifact storage reference does not match its digest")
         return self._artifact_parent(reference.sha256, create=False) / reference.sha256
 
+    def verify_root_identity(self) -> None:
+        """Fail if the resolved store or one of its ancestors was replaced."""
+
+        self._validate_directory_chain()
+
     def _artifact_parent(self, digest: str, *, create: bool) -> Path:
         expected = self.root / "sha256" / digest[:2]
         self._validate_directory_chain()
@@ -92,6 +112,35 @@ class FileArtifactStore:
                 return expected
             current = candidate
         return expected
+
+    @staticmethod
+    def _create_directory_chain(path: Path) -> None:
+        current = Path(path.anchor)
+        for component in path.parts[1:]:
+            candidate = current / component
+            created = False
+            try:
+                metadata = os.lstat(candidate)
+            except FileNotFoundError:
+                try:
+                    os.mkdir(candidate)
+                    created = True
+                    metadata = os.lstat(candidate)
+                except OSError as error:
+                    raise ArtifactCorruptionError(
+                        f"artifact directory {candidate} could not be created safely"
+                    ) from error
+            except OSError as error:
+                raise ArtifactCorruptionError(
+                    f"artifact directory {candidate} could not be inspected"
+                ) from error
+            if not stat.S_ISDIR(metadata.st_mode):
+                raise ArtifactCorruptionError(
+                    f"artifact directory {candidate} is not a real directory"
+                )
+            if created:
+                FileArtifactStore._fsync_directory(current)
+            current = candidate
 
     @staticmethod
     def _snapshot_directory_chain(path: Path) -> tuple[tuple[Path, int, int], ...]:

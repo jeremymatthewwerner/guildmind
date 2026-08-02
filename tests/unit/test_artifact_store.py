@@ -169,6 +169,73 @@ def test_artifact_store_rejects_replaced_ancestor_without_outside_mutation(
     assert sorted(path.name for path in outside_artifacts.iterdir()) == ["sentinel"]
 
 
+def test_artifact_store_rejects_preexisting_root_symlink_without_outside_mutation(
+    tmp_path: Path,
+) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    sentinel = outside / "sentinel"
+    sentinel.write_bytes(b"unchanged")
+    configured_root = tmp_path / "artifacts"
+    configured_root.symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(ArtifactCorruptionError, match="not a real directory"):
+        FileArtifactStore(configured_root)
+
+    assert configured_root.is_symlink()
+    assert sentinel.read_bytes() == b"unchanged"
+    assert sorted(path.name for path in outside.iterdir()) == ["sentinel"]
+
+
+def test_artifact_store_rejects_preexisting_ancestor_symlink_without_outside_mutation(
+    tmp_path: Path,
+) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    sentinel = outside / "sentinel"
+    sentinel.write_bytes(b"unchanged")
+    configured_parent = tmp_path / "state"
+    configured_parent.symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(ArtifactCorruptionError, match="not a real directory"):
+        FileArtifactStore(configured_parent / "artifacts", trusted_base=tmp_path)
+
+    assert configured_parent.is_symlink()
+    assert sentinel.read_bytes() == b"unchanged"
+    assert sorted(path.name for path in outside.iterdir()) == ["sentinel"]
+
+
+def test_artifact_store_accepts_a_trusted_parent_alias(tmp_path: Path) -> None:
+    physical_parent = tmp_path / "physical"
+    physical_parent.mkdir()
+    trusted_alias = tmp_path / "trusted-alias"
+    trusted_alias.symlink_to(physical_parent, target_is_directory=True)
+
+    store = FileArtifactStore(trusted_alias / "artifacts")
+    reference = store.put_text("trusted parent alias")
+
+    assert store.root == physical_parent / "artifacts"
+    assert store.get_bytes(reference) == b"trusted parent alias"
+
+
+def test_artifact_store_requires_root_below_explicit_trusted_base(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="below its trusted base"):
+        FileArtifactStore(tmp_path / "artifacts", trusted_base=tmp_path / "elsewhere")
+
+
+def test_artifact_store_rejects_replaced_real_directory_chain(tmp_path: Path) -> None:
+    original_parent = tmp_path / "state"
+    store = FileArtifactStore(original_parent / "artifacts")
+    original_parent.rename(tmp_path / "state-before-replacement")
+    replacement = original_parent / "artifacts"
+    replacement.mkdir(parents=True)
+
+    with pytest.raises(ArtifactCorruptionError, match="changed after store initialization"):
+        store.verify_root_identity()
+
+    assert list(replacement.iterdir()) == []
+
+
 def test_artifact_store_rejects_filesystem_root() -> None:
     filesystem_root = Path(Path.cwd().anchor)
 

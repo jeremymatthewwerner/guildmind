@@ -20,11 +20,27 @@ from guildmind.evaluation import (
 from guildmind.models import ModelResponse, ScriptedPatchModel
 from guildmind.runtime import BudgetExceededError, DeterministicClock, replay_events
 from guildmind.runtime.runner import FixtureRunner, FixtureRunResult
-from guildmind.storage import EventStore, FileArtifactStore
+from guildmind.storage import ArtifactCorruptionError, EventStore, FileArtifactStore
 
 _REPOSITORY_ROOT = Path(__file__).parents[2]
 _FIXTURE = _REPOSITORY_ROOT / "fixtures" / "001-python-addition"
 _START = datetime(2026, 7, 31, tzinfo=UTC)
+
+
+def test_fixture_runner_rejects_preexisting_state_symlink(tmp_path: Path) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    sentinel = outside / "sentinel"
+    sentinel.write_bytes(b"unchanged")
+    configured_state = tmp_path / "state"
+    configured_state.symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(ArtifactCorruptionError, match="not a real directory"):
+        FixtureRunner(state_directory=configured_state)
+
+    assert configured_state.is_symlink()
+    assert sentinel.read_bytes() == b"unchanged"
+    assert sorted(path.name for path in outside.iterdir()) == ["sentinel"]
 
 
 class RaisingModel:
@@ -135,6 +151,35 @@ def run_fixture(state_directory: Path, run_id: str, *, day_offset: int = 0) -> F
         run_id=run_id,
         code_revision="test-revision",
     )
+
+
+def test_fixture_runner_rejects_state_replacement_before_run_or_recovery(
+    tmp_path: Path,
+) -> None:
+    configured_state = tmp_path / "state"
+    runner = FixtureRunner(
+        state_directory=configured_state,
+        clock=DeterministicClock(started_at=_START),
+    )
+    configured_state.rename(tmp_path / "original-state")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    sentinel = outside / "sentinel"
+    sentinel.write_bytes(b"unchanged")
+    configured_state.symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(ArtifactCorruptionError, match="not a real directory"):
+        runner.recover("missing-run")
+    with pytest.raises(ArtifactCorruptionError, match="not a real directory"):
+        runner.run(
+            fixture_root=_FIXTURE,
+            model=ScriptedPatchModel(_FIXTURE / "solution.patch"),
+            run_id="must-not-run",
+            code_revision="test-revision",
+        )
+
+    assert sentinel.read_bytes() == b"unchanged"
+    assert sorted(path.name for path in outside.iterdir()) == ["sentinel"]
 
 
 def test_fixture_runner_emits_replayable_content_verified_evidence(tmp_path: Path) -> None:
