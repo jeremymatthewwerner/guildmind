@@ -62,3 +62,30 @@ exposes no matching typed evaluator
 status, so a timeout or ordinary failed response cannot honestly be relabeled PID or
 disk exhaustion. All cases still require repetition on the rootless native x86_64
 reference host before they contribute to the authoritative Stage 1 verdict.
+
+## Containment-probe boundary
+
+Secret and network isolation are not represented as patches in the 19-case corpus.
+They depend on the host/container boundary rather than a candidate's functional
+outcome, so Guildmind now tests them with a separate fixed image-owned program and a
+strict `guildmind.containment-probe-evidence/v1` envelope.
+
+For both production-shaped evaluator phases, the host plants fresh 256-bit prefixed
+file and environment canaries, passes no expectations into the image, and derives the
+verdict from the returned hash-only observation. The candidate profile may see only
+workspace and challenge; the scorer may see only challenge, grader, response, and the
+eleven evaluator binding variables. The program also inventories effective
+environment hashes, read-only mounts and active write denial, credential roots,
+interfaces/routes, five DNS names, eleven TCP endpoints, known and bounded Unix
+sockets, raw/packet socket creation, and source/cleanup evidence. Incomplete scans,
+weak nonloopback failures, malformed output, image drift, and cleanup failures are
+inconclusive rather than passes; explicit leakage, writable inputs, unexpected
+mounts/environment, connectivity, sockets, routes, interfaces, or credentials are
+exposures.
+
+Three repeated Docker Desktop reports are preserved in the
+[2026-08-02 containment bundle](evidence/containment-probes/2026-08-02-docker-desktop/README.md).
+Both candidate and scorer derived `contained` in every development run, while every
+report retained `reference_passed=false`. These observations do not add functional
+corpus cases, do not cover a general worker dispatcher, and do not satisfy the
+rootless native x86_64 reference-host gate.

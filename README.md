@@ -97,7 +97,8 @@ Guildmind now has its first deterministic local vertical slice. It can:
 - run a scripted fake model against a repository-owned coding fixture;
 - validate and apply a constrained patch to a copied workspace;
 - execute trusted local tests or a two-phase black-box container evaluation;
-- actively probe configured memory, PID, and writable-byte ceilings with versioned evidence; and
+- actively probe configured memory, PID, writable-byte, planted-secret, mount,
+  environment, credential, and network/socket boundaries with versioned evidence; and
 - verify the event chain, reconstruct terminal state, and compare normalized semantic digests across runs.
 
 The current Stage 1 hardening checkpoint adds a restricted Docker invocation contract, a pinned image-owned two-phase evaluator, and crash recovery that closes an abandoned nonterminal run with explicit terminal evidence. These are development controls and contract tests, not a claim that hostile-code containment has passed.
@@ -113,7 +114,7 @@ fixture task → fake model → validated patch → copied workspace
 
 This is engineering infrastructure for trusted repository-owned fixtures, not yet a hostile-code sandbox. Evaluator v2 closes the demonstrated same-interpreter false pass for the first fixture: candidate code receives only a patched workspace and expected-value-free JSON challenge, while a fresh scorer container receives the sealed oracle and bounded candidate response but no candidate workspace. Manifest, source, test, and oracle bytes are frozen before model dispatch; the trusted completion binds that frozen identity, and exact bounded candidate/scorer transcripts survive as content-addressed evidence. A strict [adversarial corpus](docs/adversarial-corpus.md) content-addresses 19 patch-intake, functional, boundary-integrity, timeout, output-exhaustion, and OOM cases with exact predeclared outcomes. Nine unsafe shapes now fail before Git application or sandbox dispatch; the other ten cases pass under live development evaluation.
 
-That boundary is deliberately narrow. It covers JSON-callable micro-fixtures, candidate code necessarily observes the call inputs, and it is not a general pytest or arbitrary-repository evaluator. The reproducibly built image ran successfully under the declared restrictions on Docker Desktop, including direct OOM, PID-ceiling, and exact writable-space probes, but that rootful ARM Linux virtual machine is not the required rootless x86_64 reference host. External tasks and real model-generated commands remain blocked until the checked-in gold/attack matrix and direct probes pass on that reference host and the remaining secret/network containment, process-kill recovery, and 99% normal-fixture reliability campaigns are complete. The [Stage 1 hardening gate report](docs/reviews/2026-08-01-stage-1-hardening-gate.md) records the exact evidence and retains a **NOT PASSED** verdict; [ADR 0004](docs/decisions/0004-two-phase-python-call-evaluator.md) records the v2 boundary and its limits.
+That boundary is deliberately narrow. It covers JSON-callable micro-fixtures, candidate code necessarily observes the call inputs, and it is not a general pytest or arbitrary-repository evaluator. The reproducibly built image ran successfully under the declared restrictions on Docker Desktop, including direct OOM, PID-ceiling, exact writable-space, high-entropy planted-secret, mount/environment, credential, DNS/TCP, host-route, and Unix-socket probes. Both evaluator phases were contained in three repeated reports with verified cleanup. That rootful ARM Linux virtual machine is not the required rootless x86_64 reference host, however, and the probe covers evaluator candidate/scorer requests rather than a not-yet-built general worker dispatcher. External tasks and real model-generated commands remain blocked until the checked-in gold/attack matrix and direct probes pass on the reference host and the process-kill recovery and 99% normal-fixture reliability campaigns are complete. The [Stage 1 hardening gate report](docs/reviews/2026-08-01-stage-1-hardening-gate.md) records the exact evidence and retains a **NOT PASSED** verdict; [ADR 0004](docs/decisions/0004-two-phase-python-call-evaluator.md) records the v2 boundary and its limits.
 
 Experiment 0001 also remains a draft until its worker model, spend ceilings, minimum relevant effect, and publication level are approved. Until both that Stage 0 approval and the Stage 1 boundary gate exist, the next work remains fixture hardening—not provider-backed pilots, baselines, genomes, or search.
 
@@ -148,15 +149,18 @@ make schemas
 make determinism
 ```
 
-After building the evaluator image, run the active resource suite with its exact local
-repository digest (never a mutable tag):
+After building the evaluator image, run the active resource and two-phase containment
+suites with its exact local repository digest (never a mutable tag):
 
 ```bash
 uv run guildmind probe-resources --development \
   --evaluator-image guildmind/evaluator@sha256:<digest>
+
+uv run guildmind probe-containment --development \
+  --evaluator-image guildmind/evaluator@sha256:<digest>
 ```
 
-The resulting `all_enforced` value describes that development host only.
+The resulting `all_enforced` and `all_contained` values describe that development host only.
 `reference_passed` additionally requires the strict rootless x86_64 host policy and a
 clean Git revision; development evidence cannot be promoted by relabeling it.
 Use `--output <new-file.json>` to preserve canonical evidence; the command refuses to
@@ -173,6 +177,7 @@ overwrite an existing report.
 - [Adversarial evaluator corpus](docs/adversarial-corpus.md): manifest invariants, exact attack outcomes, evidence levels, and the resource-classification boundary.
 - [Unsafe-patch intake evidence](docs/evidence/patch-intake/2026-08-02-development/README.md): the nine-case pre-application matrix, parser hardening, hashes, and evidence limits.
 - [Resource-probe evidence](docs/evidence/resource-probes/2026-08-02-docker-desktop/README.md): three canonical development reports for OOM, PID, writable-byte, and cleanup enforcement.
+- [Containment-probe evidence](docs/evidence/containment-probes/2026-08-02-docker-desktop/README.md): three canonical evaluator candidate/scorer reports for planted-secret, mount/environment, credential, network/socket, privilege, and cleanup boundaries.
 - [Architecture decisions](docs/decisions/): the Python environment, evidence storage, and sandbox/evaluator boundary.
 - [Plan review ledger](docs/reviews/2026-07-31-plan-audit.md): durable dispositions for the benchmark, runtime, and search/evaluation review findings.
 - [Stage 1 hardening gate](docs/reviews/2026-08-01-stage-1-hardening-gate.md): implemented development controls, smoke evidence, remaining adversarial matrix, reference-host procedure, and current verdict.
