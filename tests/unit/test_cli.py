@@ -4,7 +4,12 @@ from pathlib import Path
 import pytest
 
 from guildmind.cli import main
-from guildmind.sandbox import DockerHostAssessment, SandboxSelfTestReport
+from guildmind.sandbox import (
+    DockerHostAssessment,
+    DockerHostMode,
+    DockerHostPolicy,
+    SandboxSelfTestReport,
+)
 
 _REPOSITORY_ROOT = Path(__file__).parents[2]
 _FIXTURE = _REPOSITORY_ROOT / "fixtures" / "001-python-addition"
@@ -153,3 +158,91 @@ def test_doctor_production_requires_and_runs_the_active_control_probe(
     assert response["production_sandbox_ready"] is True
     assert response["checks"]["sandbox_self_test"] == {"network_disabled": True}
     _FakeDockerSandbox.reference_ready = False
+
+
+def test_resource_probe_requires_an_explicit_tier_specific_image(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.delenv("GUILDMIND_DEVELOPMENT_EVALUATOR_IMAGE", raising=False)
+
+    exit_code = main(["probe-resources", "--development"])
+
+    response = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert response["schema_version"] == "guildmind.resource-probe-error/v1"
+    assert "GUILDMIND_DEVELOPMENT_EVALUATOR_IMAGE" in response["error"]
+
+
+def test_resource_probe_rejects_whitespace_id_with_machine_readable_error(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = main(
+        [
+            "probe-resources",
+            "--development",
+            "--evaluator-image",
+            f"guildmind/evaluator@sha256:{'a' * 64}",
+            "--probe-id",
+            "   ",
+        ]
+    )
+
+    response = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert response["schema_version"] == "guildmind.resource-probe-error/v1"
+    assert "non-whitespace" in response["error"]
+
+
+class _FakeProbeReport:
+    all_enforced = True
+    reference_passed = False
+
+    def model_dump(self, *, mode: str) -> dict[str, object]:
+        assert mode == "json"
+        return {
+            "all_enforced": self.all_enforced,
+            "reference_eligible": False,
+            "reference_passed": self.reference_passed,
+            "schema_version": "guildmind.resource-probe-evidence/v1",
+        }
+
+
+def test_resource_probe_labels_development_evidence_and_uses_fixed_runner(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeProbeSandbox:
+        def __init__(self, *, host_policy: object) -> None:
+            captured["host_policy"] = host_policy
+
+    def fake_run(sandbox: object, **arguments: object) -> _FakeProbeReport:
+        captured["sandbox"] = sandbox
+        captured.update(arguments)
+        return _FakeProbeReport()
+
+    monkeypatch.setattr("guildmind.cli.DockerSandbox", FakeProbeSandbox)
+    monkeypatch.setattr("guildmind.cli.run_resource_probe_suite", fake_run)
+    monkeypatch.setattr("guildmind.cli._code_revision", lambda: "revision-123")
+
+    exit_code = main(
+        [
+            "probe-resources",
+            "--development",
+            "--evaluator-image",
+            f"guildmind/evaluator@sha256:{'a' * 64}",
+            "--probe-id",
+            "probe-123",
+        ]
+    )
+
+    response = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert response["all_enforced"] is True
+    assert captured["code_revision"] == "revision-123"
+    assert captured["probe_id"] == "probe-123"
+    host_policy = captured["host_policy"]
+    assert isinstance(host_policy, DockerHostPolicy)
+    assert host_policy.mode is DockerHostMode.DEVELOPMENT_ONLY

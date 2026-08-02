@@ -34,9 +34,20 @@ from guildmind.sandbox.local import (
     copy_and_apply_patch,
     validate_patch,
 )
+from guildmind.sandbox.resource_probe import (
+    ConfigurationVerdict,
+    EnforcementVerdict,
+    EvidenceTier,
+    ResourceProbeKind,
+    ResourceProbeSuiteEvidence,
+    candidate_resource_limits,
+    resource_probe_spec_sha256,
+    run_resource_probe_suite,
+)
 from guildmind.sandbox.selftest import SandboxSelfTestReport, run_sandbox_self_test
 
 __all__ = [
+    "ConfigurationVerdict",
     "DockerCleanupEvidence",
     "DockerContainerState",
     "DockerExecutionEvidence",
@@ -45,10 +56,14 @@ __all__ = [
     "DockerHostPolicy",
     "DockerKillEvidence",
     "DockerSandbox",
+    "EnforcementVerdict",
+    "EvidenceTier",
     "ObservedSandboxRun",
     "PatchApplyError",
     "PatchPolicy",
     "PatchValidationError",
+    "ResourceProbeKind",
+    "ResourceProbeSuiteEvidence",
     "Sandbox",
     "SandboxConfigurationError",
     "SandboxLimits",
@@ -60,7 +75,10 @@ __all__ = [
     "SandboxUnavailableError",
     "ValidatedPatch",
     "assess_docker_info",
+    "candidate_resource_limits",
     "copy_and_apply_patch",
+    "resource_probe_spec_sha256",
+    "run_resource_probe_suite",
     "run_sandbox_self_test",
     "validate_patch",
 ]
