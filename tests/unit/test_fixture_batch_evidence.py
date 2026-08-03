@@ -62,6 +62,17 @@ _REPORTS = (
             "017-inventory-delta",
         ),
     ),
+    (
+        "2026-08-03-batch-005-development-container/report.json",
+        "stage1-fixture-batch-005",
+        "6492d5580fae5ab11de8cd3231cf1f91f99f4395",
+        "5fbe7aaa9fb81a28482cdce0a7b47a2fe4272e9b351ae5255683e12734c1959e",
+        (
+            "018-latest-versions",
+            "019-recursive-redaction",
+            "020-rule-evaluation",
+        ),
+    ),
 )
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 

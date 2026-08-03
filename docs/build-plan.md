@@ -584,9 +584,9 @@ Run one deterministic task through a complete isolated lifecycle and reproduce t
   separately frozen cumulative fixtures 001–017 campaign with 17/17 expected terminal
   results and zero infrastructure errors. Treat those 17 observations as
   breadth/calibration evidence only. Batch 005 now implements fixtures 018–020 and passes
-  their three-repeat trusted-local pristine/gold gates. Their digest-pinned
-  development-container matrix and separately frozen cumulative 20-fixture calibration
-  are the next acceptance steps.
+  both their three-repeat trusted-local and reused digest-pinned two-phase
+  development-container pristine/gold gates. The separately frozen cumulative
+  20-fixture calibration is the next acceptance step.
 - Freeze the real normal-fixture campaign separately after all 20 distinct fixtures are
   accepted. Use five explicit round-major attempts per fixture, fixed attempt IDs and
   seeds, no hidden retry, and one report whose infrastructure-error numerator and

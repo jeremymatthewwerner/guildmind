@@ -49,6 +49,14 @@ _FOURTH_REPORT = (
     / "2026-08-03-batch-004-development-container"
     / "report.json"
 )
+_FIFTH_REPORT = (
+    _REPOSITORY_ROOT
+    / "docs"
+    / "evidence"
+    / "fixture-qualification"
+    / "2026-08-03-batch-005-development-container"
+    / "report.json"
+)
 _FIRST_BATCH = (
     "002-slug-normalization",
     "003-interval-merge",
@@ -72,6 +80,11 @@ _FOURTH_BATCH = (
     "015-route-matcher",
     "016-backoff-schedule",
     "017-inventory-delta",
+)
+_FIFTH_BATCH = (
+    "018-latest-versions",
+    "019-recursive-redaction",
+    "020-rule-evaluation",
 )
 _HISTORICAL_IMAGE_VARIABLE = "GUILDMIND_HISTORICAL_DEVELOPMENT_EVALUATOR_IMAGE"
 _CURRENT_IMAGE_VARIABLE = "GUILDMIND_DEVELOPMENT_EVALUATOR_IMAGE"
@@ -169,7 +182,13 @@ def _result_payload(result: LocalEvaluationResult) -> dict[str, object]:
 
 def _load_expected_fixture(fixture_name: str) -> tuple[dict[str, object], str]:
     expected_fixture_id = f"fixture-{fixture_name}"
-    for report_path in (_REPORT, _SECOND_REPORT, _THIRD_REPORT, _FOURTH_REPORT):
+    for report_path in (
+        _REPORT,
+        _SECOND_REPORT,
+        _THIRD_REPORT,
+        _FOURTH_REPORT,
+        _FIFTH_REPORT,
+    ):
         report = cast(dict[str, object], json.loads(report_path.read_bytes()))
         fixture_entries = cast(list[object], report["fixtures"])
         for raw_entry in fixture_entries:
@@ -258,6 +277,17 @@ def test_third_fixture_batch_repeats_pristine_failure_and_gold_pass_in_container
 @pytest.mark.container
 @pytest.mark.parametrize("fixture_name", _FOURTH_BATCH)
 def test_fourth_fixture_batch_repeats_pristine_failure_and_gold_pass_in_container(
+    fixture_name: str,
+) -> None:
+    _assert_fixture_repeats_pristine_failure_and_gold_pass_in_container(
+        fixture_name,
+        image_variable=_CURRENT_IMAGE_VARIABLE,
+    )
+
+
+@pytest.mark.container
+@pytest.mark.parametrize("fixture_name", _FIFTH_BATCH)
+def test_fifth_fixture_batch_repeats_pristine_failure_and_gold_pass_in_container(
     fixture_name: str,
 ) -> None:
     _assert_fixture_repeats_pristine_failure_and_gold_pass_in_container(
