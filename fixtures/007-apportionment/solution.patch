@@ -1,0 +1,25 @@
+diff --git a/apportionment.py b/apportionment.py
+--- a/apportionment.py
++++ b/apportionment.py
+@@ -5,4 +5,20 @@ def apportion(total: int, weights: list[int]) -> list[int]:
+     """Allocate ``total`` in proportion to non-negative integer weights."""
+ 
++    if total < 0 or any(weight < 0 for weight in weights):
++        raise ValueError("total and weights must be non-negative")
++    if total == 0:
++        return [0] * len(weights)
+     weight_sum = sum(weights)
+-    return [round(total * weight / weight_sum) for weight in weights]
++    if weight_sum == 0:
++        raise ValueError("a positive total requires a positive weight")
++
++    numerators = [total * weight for weight in weights]
++    allocations = [numerator // weight_sum for numerator in numerators]
++    remaining = total - sum(allocations)
++    by_remainder = sorted(
++        range(len(weights)),
++        key=lambda index: (-(numerators[index] % weight_sum), index),
++    )
++    for index in by_remainder[:remaining]:
++        allocations[index] += 1
++    return allocations

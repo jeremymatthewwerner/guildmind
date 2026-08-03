@@ -1,0 +1,39 @@
+diff --git a/runs.py b/runs.py
+--- a/runs.py
++++ b/runs.py
+@@ -7,3 +7,32 @@ def decode_runs(encoded: str) -> list[str] | None:
+-    if not encoded:
+-        return []
+-    return [encoded[2]] * int(encoded[0])
++    output: list[str] = []
++    index = 0
++    while index < len(encoded):
++        count_start = index
++        while index < len(encoded) and "0" <= encoded[index] <= "9":
++            index += 1
++        count_text = encoded[count_start:index]
++        if (
++            not count_text
++            or count_text.startswith("0")
++            or index >= len(encoded)
++            or encoded[index] != ":"
++        ):
++            return None
++        index += 1
++        if index >= len(encoded):
++            return None
++        if encoded[index] == "\\":
++            index += 1
++            if index >= len(encoded):
++                return None
++            symbol = encoded[index]
++        else:
++            symbol = encoded[index]
++            if symbol in {"\\", ";"}:
++                return None
++        index += 1
++        if index >= len(encoded) or encoded[index] != ";":
++            return None
++        index += 1
++        output.extend([symbol] * int(count_text))
++    return output

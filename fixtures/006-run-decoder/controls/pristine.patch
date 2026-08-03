@@ -1,0 +1,6 @@
+diff --git a/runs.py b/runs.py
+--- a/runs.py
++++ b/runs.py
+@@ -9 +9 @@ def decode_runs(encoded: str) -> list[str] | None:
+-    return [encoded[2]] * int(encoded[0])
++    return list([encoded[2]] * int(encoded[0]))

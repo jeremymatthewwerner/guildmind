@@ -1,0 +1,27 @@
+{
+  "schema_version": "guildmind.fixture/v1",
+  "task_id": "fixture-009-ordered-changes",
+  "problem_statement": "Fix apply_changes() so it returns a deep-copied JSON document after applying every change in order. Paths are lists of string object keys or integer list indexes resolved against the current result. A set change replaces the value at its path (an empty path replaces the root), delete removes the existing member or item at a nonempty path, and insert resolves its path to a list and inserts its value at the requested index. Inputs are valid when each change is reached.",
+  "workspace_dir": "workspace",
+  "visible_test_files": [
+    "workspace/test_visible.py"
+  ],
+  "hidden_test_files": [
+    "grader/test_hidden.py"
+  ],
+  "evaluation_protocol": {
+    "kind": "python-call-v1",
+    "module": "changes",
+    "callable": "apply_changes",
+    "cases_file": "grader/cases.json"
+  },
+  "network_required": false,
+  "expected_test_count": 6,
+  "allowed_patch_paths": [
+    "changes.py"
+  ],
+  "timeout_seconds": 5,
+  "max_output_bytes": 8192,
+  "max_patch_bytes": 4096,
+  "max_patch_files": 1
+}

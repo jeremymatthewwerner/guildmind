@@ -23,6 +23,12 @@ _FIRST_BATCH = (
     ("004-json-pointer", "pointer.py"),
     ("005-stable-dedupe", "dedupe.py"),
 )
+_SECOND_BATCH = (
+    ("006-run-decoder", "runs.py"),
+    ("007-apportionment", "apportionment.py"),
+    ("008-topological-order", "topology.py"),
+    ("009-ordered-changes", "changes.py"),
+)
 
 
 def _assert_identical_results(
@@ -34,8 +40,7 @@ def _assert_identical_results(
     assert all(result == results[0] for result in results[1:])
 
 
-@pytest.mark.parametrize(("fixture_name", "implementation"), _FIRST_BATCH)
-def test_first_fixture_batch_has_stable_pristine_and_gold_outcomes(
+def _assert_stable_pristine_and_gold_outcomes(
     fixture_name: str,
     implementation: str,
 ) -> None:
@@ -100,3 +105,19 @@ def test_first_fixture_batch_has_stable_pristine_and_gold_outcomes(
     _assert_identical_results(pristine_results, EvaluationStatus.TESTS_FAILED)
     _assert_identical_results(gold_results, EvaluationStatus.PASSED)
     assert (spec.pristine_workspace / implementation).read_bytes() == pristine_source
+
+
+@pytest.mark.parametrize(("fixture_name", "implementation"), _FIRST_BATCH)
+def test_first_fixture_batch_has_stable_pristine_and_gold_outcomes(
+    fixture_name: str,
+    implementation: str,
+) -> None:
+    _assert_stable_pristine_and_gold_outcomes(fixture_name, implementation)
+
+
+@pytest.mark.parametrize(("fixture_name", "implementation"), _SECOND_BATCH)
+def test_second_fixture_batch_has_stable_pristine_and_gold_outcomes(
+    fixture_name: str,
+    implementation: str,
+) -> None:
+    _assert_stable_pristine_and_gold_outcomes(fixture_name, implementation)

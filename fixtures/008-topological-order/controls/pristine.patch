@@ -1,0 +1,6 @@
+diff --git a/topology.py b/topology.py
+--- a/topology.py
++++ b/topology.py
+@@ -7 +7 @@ def topological_order(nodes: list[str], edges: list[list[str]]) -> list[str] | None:
+-    return sorted(nodes)
++    return list(sorted(nodes))

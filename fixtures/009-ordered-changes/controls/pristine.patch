@@ -1,0 +1,7 @@
+diff --git a/changes.py b/changes.py
+--- a/changes.py
++++ b/changes.py
+@@ -9,2 +9,2 @@ def apply_changes(document: Any, changes: list[dict[str, Any]]) -> Any:
+-    result = dict(document)
++    result = {**document}
+     for change in changes:

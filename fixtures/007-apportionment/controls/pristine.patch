@@ -1,0 +1,6 @@
+diff --git a/apportionment.py b/apportionment.py
+--- a/apportionment.py
++++ b/apportionment.py
+@@ -8 +8 @@ def apportion(total: int, weights: list[int]) -> list[int]:
+-    return [round(total * weight / weight_sum) for weight in weights]
++    return list(round(total * weight / weight_sum) for weight in weights)

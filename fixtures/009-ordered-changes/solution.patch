@@ -1,0 +1,44 @@
+diff --git a/changes.py b/changes.py
+--- a/changes.py
++++ b/changes.py
+@@ -1,6 +1,14 @@
+ """Ordered transformations over nested JSON values."""
+ 
++from copy import deepcopy
+ from typing import Any
+ 
+ 
++def _resolve(value: Any, path: list[Any]) -> Any:
++    current = value
++    for token in path:
++        current = current[token]
++    return current
++
++
+ def apply_changes(document: Any, changes: list[dict[str, Any]]) -> Any:
+@@ -7,7 +15,22 @@ def apply_changes(document: Any, changes: list[dict[str, Any]]) -> Any:
+     """Return the document after applying every valid change in order."""
+ 
+-    result = dict(document)
++    result = deepcopy(document)
+     for change in changes:
+-        if change["op"] == "set":
+-            result[change["path"][-1]] = change["value"]
++        operation = change["op"]
++        path = change["path"]
++        if operation == "set":
++            value = deepcopy(change["value"])
++            if not path:
++                result = value
++            else:
++                parent = _resolve(result, path[:-1])
++                parent[path[-1]] = value
++        elif operation == "delete":
++            parent = _resolve(result, path[:-1])
++            del parent[path[-1]]
++        elif operation == "insert":
++            target = _resolve(result, path)
++            target.insert(change["index"], deepcopy(change["value"]))
++        else:
++            raise ValueError(f"unknown change operation: {operation}")
+     return result

@@ -1,0 +1,35 @@
+diff --git a/topology.py b/topology.py
+--- a/topology.py
++++ b/topology.py
+@@ -1,4 +1,6 @@
+ """Stable dependency ordering."""
+ 
++import heapq
++
+ 
+ def topological_order(nodes: list[str], edges: list[list[str]]) -> list[str] | None:
+@@ -5,3 +7,23 @@ def topological_order(nodes: list[str], edges: list[list[str]]) -> list[str] | None:
+     """Return the lexicographically smallest topological order, or ``None``."""
+ 
+-    return sorted(nodes)
++    outgoing: dict[str, set[str]] = {node: set() for node in nodes}
++    indegree = {node: 0 for node in nodes}
++    for before, after in edges:
++        if after not in outgoing[before]:
++            outgoing[before].add(after)
++            indegree[after] += 1
++
++    ready = [node for node in nodes if indegree[node] == 0]
++    heapq.heapify(ready)
++    ordered: list[str] = []
++    while ready:
++        node = heapq.heappop(ready)
++        ordered.append(node)
++        for dependent in outgoing[node]:
++            indegree[dependent] -= 1
++            if indegree[dependent] == 0:
++                heapq.heappush(ready, dependent)
++
++    if len(ordered) != len(nodes):
++        return None
++    return ordered

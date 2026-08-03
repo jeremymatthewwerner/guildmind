@@ -1,0 +1,41 @@
+{
+  "schema_version": "guildmind.python-call-oracle/v1",
+  "cases": [
+    {
+      "case_id": "case-0001",
+      "args": [["compile", "deploy", "test"], [["compile", "test"], ["test", "deploy"]]],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": ["compile", "test", "deploy"]}
+    },
+    {
+      "case_id": "case-0002",
+      "args": [[], []],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": []}
+    },
+    {
+      "case_id": "case-0003",
+      "args": [["z", "a", "m"], []],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": ["a", "m", "z"]}
+    },
+    {
+      "case_id": "case-0004",
+      "args": [["release", "lint", "build", "test"], [["build", "lint"], ["build", "test"], ["lint", "release"], ["test", "release"]]],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": ["build", "lint", "test", "release"]}
+    },
+    {
+      "case_id": "case-0005",
+      "args": [["c", "b", "a"], [["b", "a"]]],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": ["b", "a", "c"]}
+    },
+    {
+      "case_id": "case-0006",
+      "args": [["a", "b", "c"], [["a", "b"], ["b", "a"]]],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": null}
+    }
+  ]
+}

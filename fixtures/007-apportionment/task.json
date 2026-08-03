@@ -1,0 +1,27 @@
+{
+  "schema_version": "guildmind.fixture/v1",
+  "task_id": "fixture-007-apportionment",
+  "problem_statement": "Fix apportion() for a non-negative integer total and a list of non-negative integer weights. Return one integer allocation per weight using exact largest-remainder apportionment: floor each proportional quota, then assign remaining units by descending fractional remainder, breaking ties by lower input index. A zero total returns zero for every weight; when total is positive at least one weight is positive. Allocations must sum exactly to total.",
+  "workspace_dir": "workspace",
+  "visible_test_files": [
+    "workspace/test_visible.py"
+  ],
+  "hidden_test_files": [
+    "grader/test_hidden.py"
+  ],
+  "evaluation_protocol": {
+    "kind": "python-call-v1",
+    "module": "apportionment",
+    "callable": "apportion",
+    "cases_file": "grader/cases.json"
+  },
+  "network_required": false,
+  "expected_test_count": 6,
+  "allowed_patch_paths": [
+    "apportionment.py"
+  ],
+  "timeout_seconds": 5,
+  "max_output_bytes": 8192,
+  "max_patch_bytes": 4096,
+  "max_patch_files": 1
+}
