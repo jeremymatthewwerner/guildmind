@@ -50,7 +50,7 @@ def test_python_call_bundle_strips_expected_values_from_candidate_challenge() ->
         ),
         (
             b'{"schema_version":"guildmind.python-call-oracle/v1","cases":['
-            b'{"case_id":"case-0001","args":[1.5],"kwargs":{},'
+            b'{"case_id":"case-0001","args":[1e999],"kwargs":{},'
             b'"expected":{"kind":"returned","value":1}}]}'
         ),
         b'{"schema_version":"guildmind.python-call-oracle/v1","cases":[NaN]}',
@@ -66,6 +66,21 @@ def test_python_call_bundle_rejects_ambiguous_or_unsupported_json(
 
     with pytest.raises(FixtureConfigurationError):
         load_python_call_bundle(protocol, expected_case_count=1)
+
+
+def test_python_call_bundle_accepts_and_canonicalizes_finite_numbers(tmp_path: Path) -> None:
+    cases = tmp_path / "cases.json"
+    cases.write_bytes(
+        b'{"schema_version":"guildmind.python-call-oracle/v1","cases":['
+        b'{"case_id":"case-0001","args":[2,1.5],"kwargs":{},'
+        b'"expected":{"kind":"returned","value":[2,3.0]}}]}'
+    )
+    protocol = PythonCallProtocol(module="backoff", callable_name="schedule", cases_file=cases)
+
+    bundle = load_python_call_bundle(protocol, expected_case_count=1)
+
+    assert b'"args":[2,1.5]' in bundle.challenge_bytes
+    assert b'"value":[2,3.0]' in bundle.oracle_bytes
 
 
 @pytest.mark.parametrize(

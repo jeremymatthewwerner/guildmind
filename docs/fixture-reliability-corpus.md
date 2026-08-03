@@ -32,7 +32,10 @@ trusted-local pristine/gold gate and their three-repeat two-phase development-co
 gate. A separately committed cumulative campaign then reconciled all 13 fixtures as
 expected with zero infrastructure errors. Fixtures 001–013 are therefore
 development-qualified; they still require inclusion in the final frozen schedule and
-native rootless x86_64 reference-host repetition. Rows 014–020 remain a construction plan.
+native rootless x86_64 reference-host repetition. Fixtures 014–017 now have committed
+directories and exact controls and pass their three-repeat trusted-local pristine/gold
+gate. Their rebuilt development-container gate and cumulative campaign remain pending.
+Rows 018–020 remain a construction plan.
 Locally-qualified, development-qualified, or planned rows may not be counted in the final
 campaign denominator, and none of these calibrations may be relabeled as the final Stage 1
 denominator.
@@ -77,10 +80,10 @@ A fixture is eligible only if all of the following hold:
 | 011 | `business_days(start, end, holidays)` | Date parsing and inclusive/exclusive calendar boundary | ISO strings + list | weekend endpoints, leap day, holiday/weekend overlap | Development-qualified; reference pending |
 | 012 | `parse_roman(text)` | Symbol parser with subtractive-pair validation | string | repeated symbols, legal subtraction, canonical rejection result | Development-qualified; reference pending |
 | 013 | `rotate_grid(grid)` | Rectangular matrix index transformation | nested lists | non-square matrix, one row/column, empty grid | Development-qualified; reference pending |
-| 014 | `summarize_transactions(rows)` | Filtered, grouped, stable aggregation | list of objects | refunds, missing categories, zero amounts, first-seen order | Planned |
-| 015 | `match_route(pattern, path)` | Tokenized path matching and parameter extraction | strings → object/null | literal precedence, repeated separators, percent text policy | Planned |
-| 016 | `backoff_schedule(base, factor, cap, attempts)` | Bounded deterministic recurrence | numeric scalars | cap crossing, zero attempts, nonintegral factor, no overshoot | Planned |
-| 017 | `inventory_delta(before, after)` | Multiset accounting rather than set difference | string lists → object | duplicates, removals/additions of same item, stable keys | Planned |
+| 014 | `summarize_transactions(rows)` | Filtered, grouped, stable aggregation | list of objects | refunds, missing categories, zero amounts, first-seen order | Locally qualified; container/campaign/reference pending |
+| 015 | `match_route(pattern, path)` | Tokenized path matching and parameter extraction | strings → object/null | literal precedence, repeated separators, percent text policy | Locally qualified; container/campaign/reference pending |
+| 016 | `backoff_schedule(base, factor, cap, attempts)` | Bounded deterministic recurrence | numeric scalars | cap crossing, zero attempts, nonintegral factor, no overshoot | Locally qualified; container/campaign/reference pending |
+| 017 | `inventory_delta(before, after)` | Multiset accounting rather than set difference | string lists → object | duplicates, removals/additions of same item, stable keys | Locally qualified; container/campaign/reference pending |
 | 018 | `latest_versions(records)` | Semantic-version precedence and stable record selection | list of objects | prerelease ordering, numeric components, equal-version first win | Planned |
 | 019 | `redact_keys(value, blocked)` | Recursive shape-preserving transformation | arbitrary nested JSON | blocked keys below arrays/maps, empty containers, scalar root | Planned |
 | 020 | `evaluate_rule(rule, facts)` | Recursive boolean rule tree with explicit missing-fact policy | nested rule object + map | nested all/any/not, falsy facts, missing fact, short-circuit independence | Planned |
@@ -238,6 +241,35 @@ the 100-attempt Stage 1 denominator and do not establish a population reliabilit
 The development-container host remained rootful Docker Desktop on Apple Silicon, so
 native rootless x86_64 reference-host repetition remains pending. No provider or hosted
 runtime was used.
+
+## Fourth-batch trusted-local qualification
+
+Fixtures 014–017 add four more implementation and data-shape families:
+
+- signed transaction aggregation with ignored missing categories, retained zero nets,
+  and first-seen group order;
+- slash-token route matching with parameter extraction, exact literals, normalized empty
+  segments, and raw percent text;
+- a fixed-length multiplicative backoff recurrence with zero attempts, nonintegral
+  factors, exact cap saturation, and no overshoot; and
+- stable inventory additions/removals that preserve multiset counts and input order.
+
+Each has one visibly failing pristine implementation, one visible and five hidden tests,
+six sealed oracle cases, one exact semantics-preserving pristine control, one one-file
+gold patch, and the bounded `python-call-v1` contract. The shared integration gate
+produced three identical `tests_failed` results for every pristine control and three
+identical `passed` results for every gold patch: 24 trusted-local evaluations plus four
+direct visible-failure checks.
+
+The nonintegral backoff discriminator exposed a real evaluator-contract omission rather
+than being weakened to integer-only inputs. The host oracle loader, untrusted candidate
+adapter, and trusted scorer now accept finite JSON floating-point values while continuing
+to reject `NaN`, infinities, overflow-to-infinity, non-JSON types, and nonexact object
+keys. Focused unit tests cover canonical host bytes, candidate return validation, trusted
+and hostile scorer validation, and exact finite-result comparison. The image source has
+changed, so Batch 004 requires a newly built digest-pinned development image before any
+container claim. No container, campaign, provider, or reference-host claim is made by
+this local checkpoint.
 
 ## Batch protocol
 

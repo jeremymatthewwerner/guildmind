@@ -1,0 +1,27 @@
+{
+  "schema_version": "guildmind.fixture/v1",
+  "task_id": "fixture-017-inventory-delta",
+  "problem_statement": "Fix inventory_delta() so it compares before and after as multisets rather than sets. Return an object with added and removed lists; each list contains {item, count} objects only for positive count changes. Added entries follow each item's first appearance in after, and removed entries follow first appearance in before. Repeated input values affect counts, unchanged items are omitted, both output keys are always present, and empty inputs return two empty lists.",
+  "workspace_dir": "workspace",
+  "visible_test_files": [
+    "workspace/test_visible.py"
+  ],
+  "hidden_test_files": [
+    "grader/test_hidden.py"
+  ],
+  "evaluation_protocol": {
+    "kind": "python-call-v1",
+    "module": "inventory",
+    "callable": "inventory_delta",
+    "cases_file": "grader/cases.json"
+  },
+  "network_required": false,
+  "expected_test_count": 6,
+  "allowed_patch_paths": [
+    "inventory.py"
+  ],
+  "timeout_seconds": 5,
+  "max_output_bytes": 8192,
+  "max_patch_bytes": 4096,
+  "max_patch_files": 1
+}

@@ -1,0 +1,12 @@
+diff --git a/transactions.py b/transactions.py
+--- a/transactions.py
++++ b/transactions.py
+@@ -5,7 +5,7 @@ from typing import Any
+ def summarize_transactions(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+     """Return alphabetically ordered positive transaction totals by category."""
+ 
+-    totals: dict[str, int] = {}
++    totals: dict[str, int] = dict()
+     for row in rows:
+         category = row.get("category")
+         amount = row["amount"]

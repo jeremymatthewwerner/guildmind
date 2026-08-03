@@ -1,0 +1,8 @@
+diff --git a/backoff.py b/backoff.py
+--- a/backoff.py
++++ b/backoff.py
+@@ -7,3 +7,3 @@ def backoff_schedule(base: Number, factor: Number, cap: Number, attempts: int) ->
+     """Return the uncapped geometric delays for ``attempts`` entries."""
+ 
+-    return [base * factor**index for index in range(attempts)]
++    return [base * factor**index for index in range(0, attempts)]

@@ -1,0 +1,41 @@
+{
+  "schema_version": "guildmind.python-call-oracle/v1",
+  "cases": [
+    {
+      "case_id": "case-0001",
+      "args": [["bolt", "bolt", "nut"], ["bolt", "nut", "nut", "screw"]],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": {"added": [{"item": "nut", "count": 1}, {"item": "screw", "count": 1}], "removed": [{"item": "bolt", "count": 1}]}}
+    },
+    {
+      "case_id": "case-0002",
+      "args": [["a", "a", "a", "b"], ["a", "b"]],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": {"added": [], "removed": [{"item": "a", "count": 2}]}}
+    },
+    {
+      "case_id": "case-0003",
+      "args": [[], ["x", "x", "y"]],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": {"added": [{"item": "x", "count": 2}, {"item": "y", "count": 1}], "removed": []}}
+    },
+    {
+      "case_id": "case-0004",
+      "args": [["a", "b", "a"], ["b", "a", "a"]],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": {"added": [], "removed": []}}
+    },
+    {
+      "case_id": "case-0005",
+      "args": [["old", "old", "keep", "gone"], ["new", "keep", "new", "old", "alpha"]],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": {"added": [{"item": "new", "count": 2}, {"item": "alpha", "count": 1}], "removed": [{"item": "old", "count": 1}, {"item": "gone", "count": 1}]}}
+    },
+    {
+      "case_id": "case-0006",
+      "args": [[], []],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": {"added": [], "removed": []}}
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "schema_version": "guildmind.fixture/v1",
+  "task_id": "fixture-014-transaction-summary",
+  "problem_statement": "Fix summarize_transactions() so it groups valid transactions by category and returns one {category, net} object per category in first-seen order. Each row has a nonnegative integer amount and kind sale or refund; refunds subtract from the net. Rows without category are ignored. A present category is a nonempty string, and even a zero-amount row introduces it. Retain categories whose final net is zero and return [] for no categorized rows.",
+  "workspace_dir": "workspace",
+  "visible_test_files": [
+    "workspace/test_visible.py"
+  ],
+  "hidden_test_files": [
+    "grader/test_hidden.py"
+  ],
+  "evaluation_protocol": {
+    "kind": "python-call-v1",
+    "module": "transactions",
+    "callable": "summarize_transactions",
+    "cases_file": "grader/cases.json"
+  },
+  "network_required": false,
+  "expected_test_count": 6,
+  "allowed_patch_paths": [
+    "transactions.py"
+  ],
+  "timeout_seconds": 5,
+  "max_output_bytes": 8192,
+  "max_patch_bytes": 4096,
+  "max_patch_files": 1
+}

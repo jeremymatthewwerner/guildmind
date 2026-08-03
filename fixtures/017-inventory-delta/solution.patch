@@ -1,0 +1,44 @@
+diff --git a/inventory.py b/inventory.py
+--- a/inventory.py
++++ b/inventory.py
+@@ -1,14 +1,33 @@
+ """Inventory comparison over repeated item names."""
+ 
++from collections import Counter
++
+ Change = dict[str, str | int]
+ 
+ 
+ def inventory_delta(before: list[str], after: list[str]) -> dict[str, list[Change]]:
+-    """Return alphabetic one-count differences between the two item sets."""
++    """Return stable positive multiset additions and removals."""
+ 
+-    before_items = set(before)
+-    after_items = set(after)
+-    return {
+-        "added": [{"item": item, "count": 1} for item in sorted(after_items - before_items)],
+-        "removed": [{"item": item, "count": 1} for item in sorted(before_items - after_items)],
+-    }
++    before_counts = Counter(before)
++    after_counts = Counter(after)
++    added: list[Change] = []
++    seen: set[str] = set()
++    for item in after:
++        if item in seen:
++            continue
++        seen.add(item)
++        count = after_counts[item] - before_counts[item]
++        if count > 0:
++            added.append({"item": item, "count": count})
++
++    removed: list[Change] = []
++    seen.clear()
++    for item in before:
++        if item in seen:
++            continue
++        seen.add(item)
++        count = before_counts[item] - after_counts[item]
++        if count > 0:
++            removed.append({"item": item, "count": count})
++
++    return {"added": added, "removed": removed}

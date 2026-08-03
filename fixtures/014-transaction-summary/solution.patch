@@ -1,0 +1,26 @@
+diff --git a/transactions.py b/transactions.py
+--- a/transactions.py
++++ b/transactions.py
+@@ -4,13 +4,17 @@ from typing import Any
+ 
+ 
+ def summarize_transactions(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+-    """Return alphabetically ordered positive transaction totals by category."""
++    """Return signed category nets in order of first appearance."""
+ 
+     totals: dict[str, int] = {}
+     for row in rows:
+         category = row.get("category")
+-        amount = row["amount"]
+-        if not isinstance(category, str) or amount == 0:
++        if not isinstance(category, str):
+             continue
+-        totals[category] = totals.get(category, 0) + amount
+-    return [{"category": category, "net": totals[category]} for category in sorted(totals)]
++        amount = row["amount"]
++        if row["kind"] == "refund":
++            amount = -amount
++        if category not in totals:
++            totals[category] = 0
++        totals[category] += amount
++    return [{"category": category, "net": net} for category, net in totals.items()]

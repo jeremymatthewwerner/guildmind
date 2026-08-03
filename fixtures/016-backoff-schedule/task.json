@@ -1,0 +1,27 @@
+{
+  "schema_version": "guildmind.fixture/v1",
+  "task_id": "fixture-016-backoff-schedule",
+  "problem_statement": "Fix backoff_schedule() so it returns exactly attempts deterministic delays. The first delay is base; each later delay is the previous delay multiplied by factor, capped at cap before it is emitted. Inputs are JSON numbers with 0 <= base <= cap and factor >= 1, and attempts is a nonnegative integer. Once the cap is reached it repeats. Return [] for zero attempts and never include an uncapped overshoot.",
+  "workspace_dir": "workspace",
+  "visible_test_files": [
+    "workspace/test_visible.py"
+  ],
+  "hidden_test_files": [
+    "grader/test_hidden.py"
+  ],
+  "evaluation_protocol": {
+    "kind": "python-call-v1",
+    "module": "backoff",
+    "callable": "backoff_schedule",
+    "cases_file": "grader/cases.json"
+  },
+  "network_required": false,
+  "expected_test_count": 6,
+  "allowed_patch_paths": [
+    "backoff.py"
+  ],
+  "timeout_seconds": 5,
+  "max_output_bytes": 8192,
+  "max_patch_bytes": 4096,
+  "max_patch_files": 1
+}

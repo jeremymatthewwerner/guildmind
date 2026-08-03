@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 from typing import Any
@@ -102,6 +103,10 @@ def _validate_json_value(
         raise exception("protocol JSON exceeds the nesting limit")
     value_type = type(value)
     if value is None or value_type in {bool, int, str}:
+        return
+    if value_type is float:
+        if not math.isfinite(value):
+            raise exception("protocol JSON numbers must be finite")
         return
     if value_type is list:
         for item in value:

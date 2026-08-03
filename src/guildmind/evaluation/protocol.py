@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import stat
 from dataclasses import dataclass
@@ -182,7 +183,9 @@ def _validate_json_value(value: Any, *, depth: int = 0) -> None:
         _validate_json_string(value)
         return
     if isinstance(value, float):
-        raise FixtureConfigurationError("python-call-v1 does not support floating-point values")
+        if not math.isfinite(value):
+            raise FixtureConfigurationError("evaluation JSON numbers must be finite")
+        return
     if isinstance(value, list):
         for item in value:
             _validate_json_value(item, depth=depth + 1)

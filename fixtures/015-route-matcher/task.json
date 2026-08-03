@@ -1,0 +1,27 @@
+{
+  "schema_version": "guildmind.fixture/v1",
+  "task_id": "fixture-015-route-matcher",
+  "problem_statement": "Fix match_route() so it compares slash-delimited route segments and returns captured parameters, or None when a literal or segment count differs. Empty segments from leading, trailing, or repeated slashes are ignored in both inputs. A pattern segment beginning with : captures the corresponding raw path segment under its nonempty unique name; every other segment is a case-sensitive literal. Percent text is not decoded. The root route returns {} when it matches.",
+  "workspace_dir": "workspace",
+  "visible_test_files": [
+    "workspace/test_visible.py"
+  ],
+  "hidden_test_files": [
+    "grader/test_hidden.py"
+  ],
+  "evaluation_protocol": {
+    "kind": "python-call-v1",
+    "module": "routes",
+    "callable": "match_route",
+    "cases_file": "grader/cases.json"
+  },
+  "network_required": false,
+  "expected_test_count": 6,
+  "allowed_patch_paths": [
+    "routes.py"
+  ],
+  "timeout_seconds": 5,
+  "max_output_bytes": 8192,
+  "max_patch_bytes": 4096,
+  "max_patch_files": 1
+}

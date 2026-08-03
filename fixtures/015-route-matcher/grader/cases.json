@@ -1,0 +1,41 @@
+{
+  "schema_version": "guildmind.python-call-oracle/v1",
+  "cases": [
+    {
+      "case_id": "case-0001",
+      "args": ["/teams/:team/items/:item", "//teams//red///items/42//"],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": {"team": "red", "item": "42"}}
+    },
+    {
+      "case_id": "case-0002",
+      "args": ["/teams/archive/:id", "/teams/archived/7"],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": null}
+    },
+    {
+      "case_id": "case-0003",
+      "args": ["/files/:name", "/files/a%2Fb"],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": {"name": "a%2Fb"}}
+    },
+    {
+      "case_id": "case-0004",
+      "args": ["/files/%2F", "/files/%2F"],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": {}}
+    },
+    {
+      "case_id": "case-0005",
+      "args": ["/", "////"],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": {}}
+    },
+    {
+      "case_id": "case-0006",
+      "args": ["/users/:id", "/users/7/history"],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": null}
+    }
+  ]
+}

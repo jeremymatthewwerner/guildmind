@@ -1,0 +1,17 @@
+diff --git a/backoff.py b/backoff.py
+--- a/backoff.py
++++ b/backoff.py
+@@ -5,6 +5,11 @@ Number = int | float
+ 
+ 
+ def backoff_schedule(base: Number, factor: Number, cap: Number, attempts: int) -> list[Number]:
+-    """Return the uncapped geometric delays for ``attempts`` entries."""
++    """Return exactly ``attempts`` geometric delays saturated at ``cap``."""
+ 
+-    return [base * factor**index for index in range(attempts)]
++    schedule: list[Number] = []
++    delay = base
++    for _ in range(attempts):
++        schedule.append(min(delay, cap))
++        delay = min(delay * factor, cap)
++    return schedule

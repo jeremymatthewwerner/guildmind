@@ -1,0 +1,12 @@
+diff --git a/routes.py b/routes.py
+--- a/routes.py
++++ b/routes.py
+@@ -13,7 +13,7 @@ def match_route(pattern: str, path: str) -> dict[str, str] | None:
+     if len(pattern_parts) != len(path_parts):
+         return None
+ 
+-    parameters: dict[str, str] = {}
++    parameters: dict[str, str] = dict()
+     for token, value in zip(pattern_parts, path_parts, strict=True):
+         if token.startswith(":"):
+             parameters[token[1:]] = value

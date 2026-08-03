@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import importlib
 import json
+import math
 import os
 import re
 import shutil
@@ -71,6 +72,10 @@ def _validate_json_value(value: Any, *, depth: int = 0) -> None:
         raise TypeError("candidate return value exceeds the JSON nesting limit")
     value_type = type(value)
     if value is None or value_type in {bool, int, str}:
+        return
+    if value_type is float:
+        if not math.isfinite(value):
+            raise TypeError("candidate return numbers must be finite")
         return
     if value_type is list:
         for item in value:

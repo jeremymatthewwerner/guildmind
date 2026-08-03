@@ -1,0 +1,24 @@
+diff --git a/routes.py b/routes.py
+--- a/routes.py
++++ b/routes.py
+@@ -1,14 +1,14 @@
+ """Matching of simple slash-delimited route patterns."""
+ 
+-from urllib.parse import unquote
++
++def _segments(value: str) -> list[str]:
++    return [segment for segment in value.split("/") if segment]
+ 
+ 
+ def match_route(pattern: str, path: str) -> dict[str, str] | None:
+-    """Match a route after trimming outer slashes and URL-decoding the path."""
++    """Match normalized raw route segments and return captured parameters."""
+ 
+-    pattern_text = pattern.strip("/")
+-    path_text = unquote(path).strip("/")
+-    pattern_parts = pattern_text.split("/") if pattern_text else []
+-    path_parts = path_text.split("/") if path_text else []
++    pattern_parts = _segments(pattern)
++    path_parts = _segments(path)
+     if len(pattern_parts) != len(path_parts):
+         return None

@@ -1,0 +1,41 @@
+{
+  "schema_version": "guildmind.python-call-oracle/v1",
+  "cases": [
+    {
+      "case_id": "case-0001",
+      "args": [[{"category": "tools", "kind": "sale", "amount": 9}, {"category": "books", "kind": "refund", "amount": 2}, {"category": "tools", "kind": "refund", "amount": 4}]],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": [{"category": "tools", "net": 5}, {"category": "books", "net": -2}]}
+    },
+    {
+      "case_id": "case-0002",
+      "args": [[{"kind": "sale", "amount": 99}, {"category": "food", "kind": "sale", "amount": 5}]],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": [{"category": "food", "net": 5}]}
+    },
+    {
+      "case_id": "case-0003",
+      "args": [[{"category": "free", "kind": "sale", "amount": 0}]],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": [{"category": "free", "net": 0}]}
+    },
+    {
+      "case_id": "case-0004",
+      "args": [[{"category": "fees", "kind": "sale", "amount": 3}, {"category": "fees", "kind": "refund", "amount": 3}]],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": [{"category": "fees", "net": 0}]}
+    },
+    {
+      "case_id": "case-0005",
+      "args": [[{"category": "zeta", "kind": "sale", "amount": 1}, {"category": "alpha", "kind": "sale", "amount": 2}]],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": [{"category": "zeta", "net": 1}, {"category": "alpha", "net": 2}]}
+    },
+    {
+      "case_id": "case-0006",
+      "args": [[{"category": "returns", "kind": "refund", "amount": 7}]],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": [{"category": "returns", "net": -7}]}
+    }
+  ]
+}

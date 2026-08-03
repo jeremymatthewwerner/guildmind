@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import runpy
 from collections.abc import Callable
 from pathlib import Path
@@ -22,7 +23,6 @@ def _load_script(name: str) -> dict[str, Any]:
         (1, 2),
         {1: "coerced-by-json-dumps"},
         {"nested": [{2: "also-coerced"}]},
-        1.5,
     ],
 )
 def test_invoke_rejects_non_exact_json_return_types(value: object) -> None:
@@ -38,10 +38,19 @@ def test_invoke_accepts_only_the_recursive_protocol_json_subset() -> None:
     validate(
         {
             "boolean": True,
+            "float": 1.5,
             "integer": 7,
             "list": [None, "text", {"nested": -2}],
         }
     )
+
+
+@pytest.mark.parametrize("value", [math.inf, -math.inf, math.nan])
+def test_invoke_rejects_nonfinite_float_returns(value: float) -> None:
+    validate = cast(Callable[..., None], _load_script("invoke.py")["_validate_json_value"])
+
+    with pytest.raises(TypeError, match="finite"):
+        validate(value)
 
 
 @pytest.mark.parametrize("separator", ["\u0085", "\u2028", "\u2029"])
@@ -96,6 +105,61 @@ def test_scorer_classifies_unsupported_candidate_json_as_candidate_failure() -> 
 
     with pytest.raises(candidate_failure, match="unsupported protocol JSON value"):
         validate((1, 2), candidate_controlled=True)
+
+
+def test_scorer_accepts_finite_floats_and_rejects_nonfinite_values() -> None:
+    namespace = _load_script("score.py")
+    validate = cast(Callable[..., None], namespace["_validate_json_value"])
+    candidate_failure = cast(type[Exception], namespace["CandidateFailure"])
+
+    validate([1.5, {"nested": -2.25}], candidate_controlled=True)
+    with pytest.raises(candidate_failure, match="finite"):
+        validate(math.inf, candidate_controlled=True)
+    with pytest.raises(RuntimeError, match="finite"):
+        validate(math.nan, candidate_controlled=False)
+
+
+def test_scorer_compares_exact_finite_float_results() -> None:
+    validate_protocol = cast(
+        Callable[..., tuple[int, int]], _load_script("score.py")["_validate_protocol"]
+    )
+    challenge_sha256 = "a" * 64
+    challenge = {
+        "cases": [
+            {
+                "args": [2, 1.5],
+                "case_id": "case-0001",
+                "kwargs": {},
+            }
+        ],
+        "entrypoint": {"callable": "schedule", "module": "backoff"},
+        "protocol": "python-call-v1",
+        "schema_version": "guildmind.python-call-challenge/v1",
+    }
+    oracle = {
+        "cases": [
+            {
+                "args": [2, 1.5],
+                "case_id": "case-0001",
+                "expected": {"kind": "returned", "value": [2, 3.0]},
+                "kwargs": {},
+            }
+        ],
+        "schema_version": "guildmind.python-call-oracle/v1",
+    }
+    response = {
+        "challenge_sha256": challenge_sha256,
+        "results": [{"case_id": "case-0001", "kind": "returned", "value": [2, 3.0]}],
+        "schema_version": "guildmind.python-call-response/v1",
+    }
+
+    assert validate_protocol(
+        challenge,
+        oracle,
+        response,
+        challenge_sha256=challenge_sha256,
+        expected_tests=1,
+    ) == (1, 0)
 
 
 def test_scorer_binding_commits_the_expected_case_count() -> None:
