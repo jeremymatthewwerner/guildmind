@@ -1,0 +1,228 @@
+{
+  "batch_id": "stage1-fixture-batch-001",
+  "evaluator_version": "guildmind/container-python-call-v2",
+  "evidence_level": "development-container",
+  "expected_outcomes": {
+    "gold": "passed",
+    "pristine_control": "tests_failed"
+  },
+  "fixture_count": 4,
+  "fixtures": [
+    {
+      "challenge_sha256": "2ce8b4e994081f981f0bd19b003fe1be2a19539917c765a0a68f726bea8b33fd",
+      "expected_cases": 6,
+      "fixture_id": "fixture-002-slug-normalization",
+      "fixture_manifest_sha256": "694850d9b3674583902b73bea0cef0fbf4d0f7b209e7678adaf3a33996e68c17",
+      "image_id": "sha256:31925a81fc6a21a82bcaf2370a6dfa20994a5427180fff8c0a3943d274e960d7",
+      "limits_sha256": "b088c59f21c4bfdcf924e977fb7bbbcbca490ce99ac104ed0724b689910f972b",
+      "oracle_sha256": "2794ae10a2f69719d7dacf9be8e2155896104bb805078ffc31233d76ef7edfe2",
+      "outcomes": {
+        "gold": {
+          "completion": {
+            "classification": "passed",
+            "errors": 0,
+            "expected_tests": 6,
+            "failures": 0,
+            "skipped": 0,
+            "successful": true,
+            "tests_run": 6
+          },
+          "evaluation_binding_sha256": "9afa9a57b956a79c9db443ab43aff65636fc80bc263c9963ececa646afd6639b",
+          "observed_status": "passed",
+          "patch_path": "solution.patch",
+          "patch_sha256": "65c7336474ec9bbfb2fe176726b3a7f80dcc0a29b968fe0bdcbfef81605107bb",
+          "repetitions": 3,
+          "response_sha256": "c5e59ef5c9229a6dd9bef89473ade5add3caf0fec11e5078372df9a8f48cc2fe",
+          "stable_result_sha256": "a9632d375d216f67d4bb07a36f2e86bc10828cdc63b333f083f05afdf2958751",
+          "trusted_completion_record_sha256": "2efe1ae792ef4012dfda7fdb463bb303605785b0dbe5b7bcefee01c4edd4056a"
+        },
+        "pristine_control": {
+          "completion": {
+            "classification": "candidate_failed",
+            "errors": 0,
+            "expected_tests": 6,
+            "failures": 5,
+            "skipped": 0,
+            "successful": false,
+            "tests_run": 6
+          },
+          "evaluation_binding_sha256": "2f97700a7913fb4e039caf511ac1d02843fc5f5a4ff297ccbdf99d7ea702ad0b",
+          "observed_status": "tests_failed",
+          "patch_path": "controls/pristine.patch",
+          "patch_sha256": "372a65c848e7a9a4ff58685c9e220e7cfa0e47bf9e8b9da07b967d2ea1f8a470",
+          "repetitions": 3,
+          "response_sha256": "81d54c5b0f26e17a26fd77d918fd2f455339dfe9527d38b59f2877bb06faa06c",
+          "stable_result_sha256": "d91b274caba535f270d145824a43beac220f59701965a445fcc0de9fa8430e51",
+          "trusted_completion_record_sha256": "560595e3bba80e964774c98f73f267c103be2cc5f62b567ed2d271d86d25b719"
+        }
+      },
+      "source_sha256": "da03d6f7c361d52b03a53703732e17e32b37c0733637a4467f72b79692ba2831",
+      "task_content_hash": "cc866ac3ef7bc35a509196d5057402d369780ae190108b1d9d11fa7ff691e7a5",
+      "workspace_sha256": "da03d6f7c361d52b03a53703732e17e32b37c0733637a4467f72b79692ba2831"
+    },
+    {
+      "challenge_sha256": "e0c1be1fbe17ad160d7212c69ea58f649582b0fe287cec09a45ae22d88c44f22",
+      "expected_cases": 6,
+      "fixture_id": "fixture-003-interval-merge",
+      "fixture_manifest_sha256": "6ab882403a323d12a7f45da30875ec1c5bcfeb2cd04ea86c858ac22f12333889",
+      "image_id": "sha256:31925a81fc6a21a82bcaf2370a6dfa20994a5427180fff8c0a3943d274e960d7",
+      "limits_sha256": "b088c59f21c4bfdcf924e977fb7bbbcbca490ce99ac104ed0724b689910f972b",
+      "oracle_sha256": "103c6642f07d47747d87498756c57ccd3b73f030da9b5e982844a9c05d7bf172",
+      "outcomes": {
+        "gold": {
+          "completion": {
+            "classification": "passed",
+            "errors": 0,
+            "expected_tests": 6,
+            "failures": 0,
+            "skipped": 0,
+            "successful": true,
+            "tests_run": 6
+          },
+          "evaluation_binding_sha256": "54b89f522706f2a84ee179a1f734dbfdd88a7c2c9141e278ae470e262b372978",
+          "observed_status": "passed",
+          "patch_path": "solution.patch",
+          "patch_sha256": "a7a74f1d583562b06ad7c697f0bc5071866de22e93b842db0fd9041a874497f1",
+          "repetitions": 3,
+          "response_sha256": "966e03f088adb59b92053c702ea0a198137884e20078f15d803bb527e3f323f1",
+          "stable_result_sha256": "a9af549edbd7f22b168d79adba71782315d5372f6305f586a77d82856112bd04",
+          "trusted_completion_record_sha256": "cdc89b972388f2c685468033cb5b47809ecf793d4e5c9249d330c4bffa784fd1"
+        },
+        "pristine_control": {
+          "completion": {
+            "classification": "candidate_failed",
+            "errors": 0,
+            "expected_tests": 6,
+            "failures": 4,
+            "skipped": 0,
+            "successful": false,
+            "tests_run": 6
+          },
+          "evaluation_binding_sha256": "3752a561e4fc53836e5b61c9ec8d0763d7773a9a3f822516296fd8882d262102",
+          "observed_status": "tests_failed",
+          "patch_path": "controls/pristine.patch",
+          "patch_sha256": "59ac0b256d0a972d08a1be54201cb3a3d401c6e9bd6a275b99d5b0ff23500400",
+          "repetitions": 3,
+          "response_sha256": "b8fd8b6934278c6340212528bffb3a78b16936a223054b43f1052fce31a01011",
+          "stable_result_sha256": "c4cfa469e3d3dfecdec215e3ca5e954df369c6d2e0bb7872afb0396d8d176539",
+          "trusted_completion_record_sha256": "5c027056a4197a94041e8060f46a75cba1f9dbd393ba355f0917573952a68cbb"
+        }
+      },
+      "source_sha256": "4e2314f65467971a3e69cfb7b0de99c09c4132d79ca57b0615a5bb17e88459a1",
+      "task_content_hash": "7e25ba4e39032c60fbd5be01d16a0453d91068fc3db2c4214094d77b4749ea84",
+      "workspace_sha256": "4e2314f65467971a3e69cfb7b0de99c09c4132d79ca57b0615a5bb17e88459a1"
+    },
+    {
+      "challenge_sha256": "9d271d157a3018a984dea9783ee04452ff744993474fe3be5bfea64210064fce",
+      "expected_cases": 6,
+      "fixture_id": "fixture-004-json-pointer",
+      "fixture_manifest_sha256": "5e2db46c4d32632cc2117b4677fbc2825b93c9926ce323a6f2b10a075b8fa3ed",
+      "image_id": "sha256:31925a81fc6a21a82bcaf2370a6dfa20994a5427180fff8c0a3943d274e960d7",
+      "limits_sha256": "b088c59f21c4bfdcf924e977fb7bbbcbca490ce99ac104ed0724b689910f972b",
+      "oracle_sha256": "6fb74a58695918dc2c15084f2f2c87bbc0af7f4f1644d19ae2d77e3acdd2be34",
+      "outcomes": {
+        "gold": {
+          "completion": {
+            "classification": "passed",
+            "errors": 0,
+            "expected_tests": 6,
+            "failures": 0,
+            "skipped": 0,
+            "successful": true,
+            "tests_run": 6
+          },
+          "evaluation_binding_sha256": "6fa87626b15ec8d0a44b7fdc1f2cd6eafe369399ba88b72b84dda5412897b6ee",
+          "observed_status": "passed",
+          "patch_path": "solution.patch",
+          "patch_sha256": "5251687282432846492a8a316743429b8922108fb6afacb78fb36560f474aaff",
+          "repetitions": 3,
+          "response_sha256": "61945e438f0d36432408f94aecbaa936216c930d4dc05465751c246eacf5cb3d",
+          "stable_result_sha256": "456f73913e0dc1456ae11bb8535264eb0441ea6cd48104fb0b502f79614efc04",
+          "trusted_completion_record_sha256": "9a771843e97abccc2e3e999bfdf345b47bc47056f9badb94e09e9b4772dc136a"
+        },
+        "pristine_control": {
+          "completion": {
+            "classification": "candidate_failed",
+            "errors": 0,
+            "expected_tests": 6,
+            "failures": 6,
+            "skipped": 0,
+            "successful": false,
+            "tests_run": 6
+          },
+          "evaluation_binding_sha256": "b19219452431d430e74a82ab6e17555672adb60f3173a1f6530675864696b073",
+          "observed_status": "tests_failed",
+          "patch_path": "controls/pristine.patch",
+          "patch_sha256": "fbea7079ddbe71d93424ce76961ab44e77489ee5d52cbb5eca5338642bb4c5da",
+          "repetitions": 3,
+          "response_sha256": "5b0b5c26132f59726e4129fb5ba6d6677205a6bec474bcff7e02eefea23de31d",
+          "stable_result_sha256": "64c3ba91dbc694b5227c496ca959f356b00d57df1165eb47dd99fcb75ae36f7c",
+          "trusted_completion_record_sha256": "f43965cf2d52ca75f8643a6a53da21db975a458c6c0656ca130d30062c5ae4e3"
+        }
+      },
+      "source_sha256": "3eb61da63267c58cb640e4a747efb71545b97f37dda77c4ba68ec184846eae61",
+      "task_content_hash": "7fd0138f64401938635bc2174526c3f35c1e1526aec54d0c9d7958d8d76e45e8",
+      "workspace_sha256": "3eb61da63267c58cb640e4a747efb71545b97f37dda77c4ba68ec184846eae61"
+    },
+    {
+      "challenge_sha256": "84e4732664d863277e12349e36c1102ac2bc6c700b5e0a81cb634e9f6f4f23c9",
+      "expected_cases": 6,
+      "fixture_id": "fixture-005-stable-dedupe",
+      "fixture_manifest_sha256": "af9e1bc066c5dec6595cf3384066da240f7da38a34a9b3f474cadb3312642d81",
+      "image_id": "sha256:31925a81fc6a21a82bcaf2370a6dfa20994a5427180fff8c0a3943d274e960d7",
+      "limits_sha256": "b088c59f21c4bfdcf924e977fb7bbbcbca490ce99ac104ed0724b689910f972b",
+      "oracle_sha256": "e9192f1ab6f95935a5199a4c537bf3e6ba764e95ceb121a1944877520f8cdc1d",
+      "outcomes": {
+        "gold": {
+          "completion": {
+            "classification": "passed",
+            "errors": 0,
+            "expected_tests": 6,
+            "failures": 0,
+            "skipped": 0,
+            "successful": true,
+            "tests_run": 6
+          },
+          "evaluation_binding_sha256": "fa1c87ff742ab78e6316437b1a15ccff8e75cfb29d0ada1389b6eb36e3ec4bc8",
+          "observed_status": "passed",
+          "patch_path": "solution.patch",
+          "patch_sha256": "816efc61a7a33e418434e244103d6cf7831a523642e3a35314f086a4f2c0f3d2",
+          "repetitions": 3,
+          "response_sha256": "215d21eb6b782e34a47bca28d2ce655f2539f8fb6791b35b852c30a3f198cbf6",
+          "stable_result_sha256": "a2480eecdc055f5c494cc3cfce62455624be66c7c33dfb996799ba7d94d46c16",
+          "trusted_completion_record_sha256": "c96ac3b48c021d325fed7655610d57b1a4564f62902cdb8789e744b5cea9acaf"
+        },
+        "pristine_control": {
+          "completion": {
+            "classification": "candidate_failed",
+            "errors": 0,
+            "expected_tests": 6,
+            "failures": 5,
+            "skipped": 0,
+            "successful": false,
+            "tests_run": 6
+          },
+          "evaluation_binding_sha256": "505be203a73a044d9aa6a48ea1b8c3b50639e78b52f4ba9e556cd8499d3b7d30",
+          "observed_status": "tests_failed",
+          "patch_path": "controls/pristine.patch",
+          "patch_sha256": "8ede22c050e9e6b17340aea7500eb58bf2a087da9e05b5800a6fe8e1fce01b6b",
+          "repetitions": 3,
+          "response_sha256": "d622b98d94ece37fdf22d39eacbf189e50d15ea516a5f0f4a4a0258de758abbd",
+          "stable_result_sha256": "13d261d3555a9ca32948c43dd0c6bbac005d2437bd35e8084520c27521b25fe1",
+          "trusted_completion_record_sha256": "af2234056f4898ddcc2e80c3524792c865f238450ddbad24c0869934d43b7fab"
+        }
+      },
+      "source_sha256": "ddf99e8b8c88d65ec506f098ca1160b4eb5d372bdb2465ffed6cf0b76456d9dd",
+      "task_content_hash": "7193cefbd93e7a70a882f2718dd6a5fb33342cbe372e8e3cdf7242e9daeebbdc",
+      "workspace_sha256": "ddf99e8b8c88d65ec506f098ca1160b4eb5d372bdb2465ffed6cf0b76456d9dd"
+    }
+  ],
+  "image_reference": "guildmind/evaluator@sha256:31925a81fc6a21a82bcaf2370a6dfa20994a5427180fff8c0a3943d274e960d7",
+  "recorded_on": "2026-08-03",
+  "repository_revision": "c11d38b8372937191153ce4a87805f27b281f1d0",
+  "repository_tracked_clean": true,
+  "repetitions_per_outcome": 3,
+  "report_body_sha256": "191f09d5b3b3a5f591b159ba96a9c3805f76449c457e394ec6bac8631f850f95",
+  "schema_version": "guildmind.fixture-batch-container-qualification/v1",
+  "total_evaluations": 24
+}

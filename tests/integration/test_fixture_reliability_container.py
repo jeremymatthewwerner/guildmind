@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import cast
 
 import pytest
 
-from guildmind.domain import sha256_bytes
+from guildmind.domain import canonical_sha256, sha256_bytes
 from guildmind.evaluation import (
     ContainerEvaluator,
     EvaluationStatus,
@@ -16,6 +17,14 @@ from guildmind.evaluation import (
 from guildmind.sandbox import DockerHostPolicy, DockerSandbox
 
 _REPOSITORY_ROOT = Path(__file__).parents[2]
+_REPORT = (
+    _REPOSITORY_ROOT
+    / "docs"
+    / "evidence"
+    / "fixture-qualification"
+    / "2026-08-03-batch-001-development-container"
+    / "report.json"
+)
 _FIRST_BATCH = (
     "002-slug-normalization",
     "003-interval-merge",
@@ -46,10 +55,14 @@ def _assert_repeated_container_result(
     results: tuple[LocalEvaluationResult, ...],
     *,
     expected_status: EvaluationStatus,
+    expected_evidence: dict[str, object],
     image: str,
 ) -> None:
     assert len(results) == 3
     assert all(result == results[0] for result in results[1:])
+    assert (
+        canonical_sha256(_result_payload(results[0])) == expected_evidence["stable_result_sha256"]
+    )
     for result in results:
         assert result.status is expected_status
         assert result.output_truncated is False
@@ -63,6 +76,16 @@ def _assert_repeated_container_result(
         candidate = cast(dict[str, object], result.execution["candidate"])
         scorer = cast(dict[str, object], result.execution["scorer"])
         completion = cast(dict[str, object], result.execution["completion"])
+        assert (
+            result.execution["evaluation_binding_sha256"]
+            == expected_evidence["evaluation_binding_sha256"]
+        )
+        assert result.execution["response_sha256"] == expected_evidence["response_sha256"]
+        assert (
+            result.execution["trusted_completion_record_sha256"]
+            == expected_evidence["trusted_completion_record_sha256"]
+        )
+        assert completion == expected_evidence["completion"]
         assert candidate["sandbox_status"] == "exited"
         assert scorer["sandbox_status"] == "exited"
         assert candidate["output_truncated"] is False
@@ -84,6 +107,32 @@ def _assert_repeated_container_result(
             assert completion["successful"] is False
             failures = completion["failures"]
             assert isinstance(failures, int) and failures > 0
+
+
+def _result_payload(result: LocalEvaluationResult) -> dict[str, object]:
+    return {
+        "task_id": result.task_id,
+        "status": result.status.value,
+        "exit_code": result.exit_code,
+        "stdout": result.stdout,
+        "stderr": result.stderr,
+        "output_truncated": result.output_truncated,
+        "execution": result.execution,
+        "candidate_stdout_sha256": sha256_bytes(result.raw_candidate_stdout or b""),
+        "scorer_stdout_sha256": sha256_bytes(result.raw_scorer_stdout or b""),
+    }
+
+
+def _load_expected_outcome(fixture_name: str, outcome_name: str) -> dict[str, object]:
+    report = cast(dict[str, object], json.loads(_REPORT.read_bytes()))
+    fixture_entries = cast(list[object], report["fixtures"])
+    expected_fixture_id = f"fixture-{fixture_name}"
+    for raw_entry in fixture_entries:
+        entry = cast(dict[str, object], raw_entry)
+        if entry["fixture_id"] == expected_fixture_id:
+            outcomes = cast(dict[str, object], entry["outcomes"])
+            return cast(dict[str, object], outcomes[outcome_name])
+    raise AssertionError(f"missing fixture evidence: {expected_fixture_id}")
 
 
 @pytest.mark.container
@@ -114,10 +163,12 @@ def test_first_fixture_batch_repeats_pristine_failure_and_gold_pass_in_container
     _assert_repeated_container_result(
         pristine_results,
         expected_status=EvaluationStatus.TESTS_FAILED,
+        expected_evidence=_load_expected_outcome(fixture_name, "pristine_control"),
         image=image,
     )
     _assert_repeated_container_result(
         gold_results,
         expected_status=EvaluationStatus.PASSED,
+        expected_evidence=_load_expected_outcome(fixture_name, "gold"),
         image=image,
     )

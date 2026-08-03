@@ -15,11 +15,12 @@ one-percentage-point resolution. It does not prove that the underlying rate is b
 such a claim requires a separately preregistered confidence rule and more observations.
 
 Fixture 001 and the one-attempt campaign are accepted development harness evidence.
-Fixtures 002–005 now have committed fixture directories and have passed the repository's
-three-repeat local pristine/gold gate. They remain development fixtures until their
-content identities, two-phase container results, and batch-calibration campaign evidence
-are committed. Rows 006–020 remain a construction plan. Neither locally qualified nor
-planned rows may be counted in the final Stage 1 reliability denominator.
+Fixtures 002–005 now have committed fixture directories and have passed both the
+three-repeat trusted-local gate and the three-repeat two-phase development-container gate
+for their exact pristine controls and gold patches. They remain development fixtures
+until batch-calibration campaign evidence and rootless x86_64 reference-host repetition
+are committed. Rows 006–020 remain a construction plan. Neither development-qualified
+nor planned rows may be counted in the final Stage 1 reliability denominator.
 
 ## Anti-duplication and acceptance rules
 
@@ -49,10 +50,10 @@ A fixture is eligible only if all of the following hold:
 | ID | Callable | Primary semantic / bug class | Principal JSON shape | Key sealed discriminator | Status |
 |---|---|---|---|---|---|
 | 001 | `add(left, right)` | Signed scalar arithmetic; wrong operator | integer scalars | mixed signs and unbounded integer carry | Accepted; one-fixture smoke |
-| 002 | `slugify(text)` | Unicode-aware normalization and separator collapse | string | punctuation runs, outer separators, Unicode letters | Local gate passed; container/campaign pending |
-| 003 | `merge_intervals(intervals)` | Ordering plus closed-integer interval coalescing | nested integer lists | unsorted containment, adjacency, negatives, empty input | Local gate passed; container/campaign pending |
-| 004 | `resolve_pointer(document, pointer)` | Escaped-token traversal across maps and arrays | arbitrary nested JSON | RFC 6901 `~0`/`~1`, root pointer, empty key, list index | Local gate passed; container/campaign pending |
-| 005 | `dedupe_by(records, key)` | Stable first-wins deduplication by structural JSON identity | list of objects | falsy, list-valued, and object-valued keys while preserving order | Local gate passed; container/campaign pending |
+| 002 | `slugify(text)` | Unicode-aware normalization and separator collapse | string | punctuation runs, outer separators, Unicode letters | Local + development container passed; campaign/reference pending |
+| 003 | `merge_intervals(intervals)` | Ordering plus closed-integer interval coalescing | nested integer lists | unsorted containment, adjacency, negatives, empty input | Local + development container passed; campaign/reference pending |
+| 004 | `resolve_pointer(document, pointer)` | Escaped-token traversal across maps and arrays | arbitrary nested JSON | RFC 6901 `~0`/`~1`, root pointer, empty key, list index | Local + development container passed; campaign/reference pending |
+| 005 | `dedupe_by(records, key)` | Stable first-wins deduplication by structural JSON identity | list of objects | falsy, list-valued, and object-valued keys while preserving order | Local + development container passed; campaign/reference pending |
 | 006 | `decode_runs(encoded)` | Stateful run-length parser with multi-digit counts | string → list | multi-digit runs, literal separators, zero/invalid run policy | Planned |
 | 007 | `apportion(total, weights)` | Largest-remainder integer allocation and deterministic ties | integer + numeric list | exact total, zero weights, lexical/index tie break | Planned |
 | 008 | `topological_order(nodes, edges)` | Graph dependency resolution with stable ready-queue order | strings + edge pairs | disconnected graph, diamond, lexical tie, cycle result | Planned |
@@ -93,6 +94,24 @@ mypy clean. The skips include the digest-pinned development/reference container 
 so this is deliberately **local qualification**, not container or reference-host
 evidence. It used the scripted/local path and incurred no model-provider or deployment
 cost.
+
+## First-batch development-container qualification
+
+The exact same four pristine controls and four gold patches then ran three times each
+through `ContainerEvaluator` using the rebuilt digest-pinned development image. All 12
+pristine-control results were stable `tests_failed` classifications; all 12 gold results
+were stable `passed` classifications; every scorer ran all six cases; and there were no
+infrastructure errors, skips, truncations, or residual managed containers.
+
+The [development-container evidence](evidence/fixture-qualification/2026-08-03-batch-001-development-container/README.md)
+and its self-bound JSON report preserve fixture, source, challenge, oracle, task, limits,
+patch, response, completion, image, and evaluation-binding hashes. An always-on unit test
+recomputes the source identities and report body; the opt-in live integration test
+recomputes every stable result and binding from 48 fresh disposable containers.
+
+The host was rootful Docker Desktop on Apple Silicon, running the linux/amd64 evaluator
+under emulation. This is useful development qualification and explicitly not the required
+native rootless x86_64 reference-host result.
 
 ## Batch protocol
 
