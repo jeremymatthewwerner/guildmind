@@ -2,8 +2,9 @@
 
 No-follow path identities bind the initial audit to the writable operation at every
 deterministic hand-off. This does not make several independent pathname checks atomic
-against an actively hostile same-UID process; authoritative use still requires the
-quiescent exclusive-writer maintenance window documented by the storage audit.
+against an actively hostile same-UID process. This supported path holds the cooperative
+shared maintenance lease across its fresh audit and mutation; direct low-level callers
+remain responsible for the same coordination boundary.
 """
 
 from __future__ import annotations
@@ -18,7 +19,11 @@ from pathlib import Path
 from guildmind.domain import EventRecord, RunManifest
 from guildmind.runtime.clock import Clock, SystemClock
 from guildmind.storage.artifacts import ArtifactCorruptionError, FileArtifactStore
-from guildmind.storage.coordinator import StorageIntegrityState, audit_storage
+from guildmind.storage.coordinator import (
+    StorageIntegrityReport,
+    StorageIntegrityState,
+    audit_storage,
+)
 from guildmind.storage.events import (
     EventStore,
     StoreIntegrityError,
@@ -26,6 +31,11 @@ from guildmind.storage.events import (
     verified_run_roots_sha256,
 )
 from guildmind.storage.integrity import audit_artifact_store
+from guildmind.storage.maintenance import (
+    MaintenanceBusyError,
+    MaintenanceIntegrityError,
+    MaintenanceLease,
+)
 
 
 class RecoveryDenialReason(StrEnum):
@@ -35,6 +45,7 @@ class RecoveryDenialReason(StrEnum):
     RUN_NOT_FOUND = "run_not_found"
     STORAGE_CHANGED = "storage_changed"
     REFERENCED_EVIDENCE_INVALID = "referenced_evidence_invalid"
+    MAINTENANCE_BUSY = "maintenance_busy"
 
 
 class _FixtureTerminalizationOperation(StrEnum):
@@ -66,6 +77,22 @@ class FixtureRecoveryResult:
     events: tuple[EventRecord, ...]
 
 
+class RecoveryPostCommitMaintenanceError(RuntimeError):
+    """Raised when terminalization committed but its maintenance lease closed unsafely."""
+
+    def __init__(
+        self,
+        result: FixtureRecoveryResult,
+        release_error: MaintenanceIntegrityError,
+    ) -> None:
+        self.result = result
+        self.release_error = release_error
+        super().__init__(
+            f"recovery for run {result.manifest.run_id!r} committed, "
+            "but maintenance lease release failed"
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class _PathIdentity:
     file_type: int | None
@@ -92,11 +119,12 @@ def recover_existing_fixture_run(
     clock: Clock | None = None,
     terminal_reason: str = "interrupted_run_recovered",
 ) -> FixtureRecoveryResult:
-    """Recover one existing run without initializing or repairing its storage.
+    """Recover one existing run without initializing or repairing its data stores.
 
     The serialized storage report is deliberately not an input. Every call performs
     its own fresh audit, then verifies the same complete ledger commitment and all
-    recursively reachable artifact bytes again under SQLite's writer window.
+    recursively reachable artifact bytes again under SQLite's writer window. A valid
+    legacy state can gain the persistent empty maintenance-lock inode.
     """
 
     return _terminalize_existing_fixture_run(
@@ -127,6 +155,60 @@ def terminalize_existing_fixture_budget_refusal(
 
 
 def _terminalize_existing_fixture_run(
+    *,
+    state_directory: Path,
+    run_id: str,
+    clock: Clock | None,
+    terminal_reason: str,
+    operation: _FixtureTerminalizationOperation,
+) -> FixtureRecoveryResult:
+    try:
+        lease = MaintenanceLease.acquire_shared(state_directory)
+    except MaintenanceBusyError as error:
+        raise RecoveryDeniedError(
+            RecoveryDenialReason.MAINTENANCE_BUSY,
+            run_id=run_id,
+        ) from error
+    except MaintenanceIntegrityError as error:
+        raise RecoveryDeniedError(
+            RecoveryDenialReason.STORAGE_NOT_RECOVERABLE,
+            run_id=run_id,
+            storage_state=_diagnostic_storage_state(state_directory),
+        ) from error
+    try:
+        result = _terminalize_existing_fixture_run_under_shared_lease(
+            state_directory=state_directory,
+            run_id=run_id,
+            clock=clock,
+            terminal_reason=terminal_reason,
+            operation=operation,
+        )
+    except BaseException as error:
+        try:
+            lease.close()
+        except BaseException as release_error:
+            error.add_note(f"maintenance lease release also failed: {release_error!r}")
+        raise
+    try:
+        lease.close()
+    except MaintenanceIntegrityError as error:
+        raise RecoveryPostCommitMaintenanceError(result, error) from error
+    return result
+
+
+def _diagnostic_storage_state(state_directory: Path) -> StorageIntegrityState | None:
+    """Classify a lease-open denial without creating or authorizing storage."""
+
+    state = Path(os.path.abspath(state_directory))
+    if state == Path(state.anchor):
+        return None
+    try:
+        return audit_storage(state).state
+    except (ArtifactCorruptionError, OSError, StoreIntegrityError, ValueError):
+        return None
+
+
+def _terminalize_existing_fixture_run_under_shared_lease(
     *,
     state_directory: Path,
     run_id: str,
@@ -182,6 +264,29 @@ def _terminalize_existing_fixture_run(
             storage_state=report.state,
         )
 
+    return _commit_existing_fixture_terminalization(
+        state=state,
+        run_id=run_id,
+        selected_clock=selected_clock,
+        terminal_reason=terminal_reason,
+        operation=operation,
+        expected_identity=expected_identity,
+        report=report,
+        snapshot_sha256=snapshot.snapshot_sha256,
+    )
+
+
+def _commit_existing_fixture_terminalization(
+    *,
+    state: Path,
+    run_id: str,
+    selected_clock: Clock,
+    terminal_reason: str,
+    operation: _FixtureTerminalizationOperation,
+    expected_identity: _StorageIdentity,
+    report: StorageIntegrityReport,
+    snapshot_sha256: str,
+) -> FixtureRecoveryResult:
     database = state / "runs.db"
 
     def verify_locked_artifacts(roots: tuple[VerifiedRunRoot, ...]) -> None:
@@ -231,7 +336,7 @@ def _terminalize_existing_fixture_run(
                     run_id,
                     finished_at=finished_at,
                     terminal_reason=terminal_reason,
-                    expected_snapshot_sha256=snapshot.snapshot_sha256,
+                    expected_snapshot_sha256=snapshot_sha256,
                     integrity_guard=verify_locked_artifacts,
                 )
             else:
@@ -239,7 +344,7 @@ def _terminalize_existing_fixture_run(
                     run_id,
                     finished_at=finished_at,
                     terminal_reason=terminal_reason,
-                    expected_snapshot_sha256=snapshot.snapshot_sha256,
+                    expected_snapshot_sha256=snapshot_sha256,
                     integrity_guard=verify_locked_artifacts,
                 )
     except RecoveryDeniedError:

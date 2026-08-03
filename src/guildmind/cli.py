@@ -21,9 +21,13 @@ from typing import Any
 from guildmind.domain import export_json_schemas
 from guildmind.evaluation import LocalEvaluator, load_fixture
 from guildmind.models import ScriptedPatchModel
-from guildmind.runtime.recovery import RecoveryDeniedError, recover_existing_fixture_run
+from guildmind.runtime.recovery import (
+    RecoveryDeniedError,
+    RecoveryPostCommitMaintenanceError,
+    recover_existing_fixture_run,
+)
 from guildmind.runtime.replay import ReplayIntegrityError, replay_events, semantic_digest
-from guildmind.runtime.runner import FixtureRunner
+from guildmind.runtime.runner import FixtureRunner, FixtureRunPostCommitMaintenanceError
 from guildmind.sandbox import (
     DockerHostPolicy,
     DockerSandbox,
@@ -401,12 +405,28 @@ def _run(arguments: argparse.Namespace) -> int:
     fixture = arguments.fixture.resolve()
     run_id = arguments.run_id or f"run-{uuid.uuid4().hex}"
     model = ScriptedPatchModel(fixture / "solution.patch")
-    result = FixtureRunner(state_directory=arguments.state_dir).run(
-        fixture_root=fixture,
-        model=model,
-        run_id=run_id,
-        code_revision=_code_revision(),
-    )
+    try:
+        result = FixtureRunner(state_directory=arguments.state_dir).run(
+            fixture_root=fixture,
+            model=model,
+            run_id=run_id,
+            code_revision=_code_revision(),
+        )
+    except FixtureRunPostCommitMaintenanceError as error:
+        result = error.result
+        _print_json(
+            {
+                "artifacts": str(result.artifact_root),
+                "database": str(result.database_path),
+                "error": "run_committed_maintenance_release_failed",
+                "evaluation_outcome": result.evaluation.outcome,
+                "run_id": result.manifest.run_id,
+                "schema_version": "guildmind.run-postcommit/v1",
+                "semantic_digest": result.semantic_digest,
+                "status": result.manifest.status.value,
+            }
+        )
+        return 1
     _print_json(
         {
             "artifacts": str(result.artifact_root),
@@ -490,6 +510,21 @@ def _recover(arguments: argparse.Namespace) -> int:
                 "storage_state": (
                     None if error.storage_state is None else error.storage_state.value
                 ),
+            }
+        )
+        return 1
+    except RecoveryPostCommitMaintenanceError as error:
+        events = list(error.result.events)
+        state = replay_events(events, require_terminal=True)
+        _print_json(
+            {
+                "error": "recovery_committed_maintenance_release_failed",
+                "event_count": state.event_count,
+                "run_id": error.result.manifest.run_id,
+                "schema_version": "guildmind.recovery-postcommit/v1",
+                "semantic_digest": semantic_digest(events),
+                "status": error.result.manifest.status.value,
+                "terminal_reason": error.result.manifest.terminal_reason,
             }
         )
         return 1

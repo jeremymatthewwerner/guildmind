@@ -26,7 +26,13 @@ from guildmind.runtime.recovery import (
     terminalize_existing_fixture_budget_refusal,
 )
 from guildmind.runtime.replay import ReplayState, replay_events, semantic_digest
-from guildmind.storage import ArtifactCorruptionError, EventStore, FileArtifactStore
+from guildmind.storage import (
+    ArtifactCorruptionError,
+    EventStore,
+    FileArtifactStore,
+    MaintenanceIntegrityError,
+    MaintenanceLease,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,6 +45,22 @@ class FixtureRunResult:
     semantic_digest: str
     database_path: Path
     artifact_root: Path
+
+
+class FixtureRunPostCommitMaintenanceError(RuntimeError):
+    """Raised when evidence committed but the outer maintenance lease closed unsafely."""
+
+    def __init__(
+        self,
+        result: FixtureRunResult,
+        release_error: MaintenanceIntegrityError,
+    ) -> None:
+        self.result = result
+        self.release_error = release_error
+        super().__init__(
+            f"fixture run {result.manifest.run_id!r} committed, "
+            "but maintenance lease release failed"
+        )
 
 
 class FixtureRunner:
@@ -67,6 +89,50 @@ class FixtureRunner:
         candidate_id: str = "scripted-solo-v0",
         seed: int = 0,
         budget_limits: BudgetLimits | None = None,
+    ) -> FixtureRunResult:
+        """Run one fixture while excluding state-wide maintenance.
+
+        The shared lease spans the first CAS publication through the final SQLite
+        binding transaction. Exception recovery nests the same process-local shared
+        lease safely, so no gap opens before terminalization.
+        """
+
+        self._verify_state_directory_identity()
+        lease = MaintenanceLease.acquire_shared(self.state_directory)
+        try:
+            result = self._run_with_shared_lease(
+                fixture_root=fixture_root,
+                model=model,
+                run_id=run_id,
+                code_revision=code_revision,
+                experiment_id=experiment_id,
+                candidate_id=candidate_id,
+                seed=seed,
+                budget_limits=budget_limits,
+            )
+        except BaseException as error:
+            try:
+                lease.close()
+            except BaseException as release_error:
+                error.add_note(f"maintenance lease release also failed: {release_error!r}")
+            raise
+        try:
+            lease.close()
+        except MaintenanceIntegrityError as error:
+            raise FixtureRunPostCommitMaintenanceError(result, error) from error
+        return result
+
+    def _run_with_shared_lease(
+        self,
+        *,
+        fixture_root: Path,
+        model: ModelClient,
+        run_id: str,
+        code_revision: str,
+        experiment_id: str,
+        candidate_id: str,
+        seed: int,
+        budget_limits: BudgetLimits | None,
     ) -> FixtureRunResult:
         self._verify_state_directory_identity()
         artifact_root = self.state_directory / "artifacts"

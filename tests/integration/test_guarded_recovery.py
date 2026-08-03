@@ -21,6 +21,7 @@ from guildmind.runtime.clock import DeterministicClock
 from guildmind.runtime.recovery import (
     RecoveryDenialReason,
     RecoveryDeniedError,
+    RecoveryPostCommitMaintenanceError,
     recover_existing_fixture_run,
     terminalize_existing_fixture_budget_refusal,
 )
@@ -31,6 +32,11 @@ from guildmind.storage.coordinator import audit_storage as real_audit_storage
 from guildmind.storage.events import EventStore, VerifiedRunRoot
 from guildmind.storage.integrity import ArtifactAudit
 from guildmind.storage.integrity import audit_artifact_store as real_artifact_audit
+from guildmind.storage.maintenance import (
+    MaintenanceIntegrityError,
+    MaintenanceIntegrityReason,
+    MaintenanceLease,
+)
 
 _START = datetime(2026, 8, 3, 9, 0, tzinfo=UTC)
 _IMAGE_DIGEST = f"sha256:{'a' * 64}"
@@ -136,6 +142,41 @@ def test_guarded_recovery_succeeds_idempotently_and_preserves_orphans(
     assert sum(event.event_type == "run.terminal" for event in first.events) == 1
     assert (orphan_path.stat().st_dev, orphan_path.stat().st_ino) == orphan_identity
     assert orphan_path.read_bytes() == orphan_bytes
+
+
+def test_guarded_recovery_classifies_lease_release_failure_as_post_commit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state = tmp_path / "state"
+    _populate_running_run(state)
+    real_close = MaintenanceLease.close
+
+    def close_then_report_integrity_failure(lease: MaintenanceLease) -> None:
+        real_close(lease)
+        raise MaintenanceIntegrityError(
+            MaintenanceIntegrityReason.LOCK_CHANGED,
+            state_directory=state,
+            detail="injected release-time identity failure",
+        )
+
+    monkeypatch.setattr(MaintenanceLease, "close", close_then_report_integrity_failure)
+
+    with pytest.raises(RecoveryPostCommitMaintenanceError) as captured:
+        recover_existing_fixture_run(
+            state_directory=state,
+            run_id="run-a",
+            clock=DeterministicClock(started_at=_START + timedelta(minutes=1)),
+        )
+
+    assert captured.value.result.manifest.status is RunStatus.INFRASTRUCTURE_ERROR
+    assert captured.value.result.events[-1].event_type == "run.terminal"
+    with EventStore.open_existing_read_only(
+        state / "runs.db",
+        trusted_base=state.parent,
+    ) as event_store:
+        assert event_store.load_manifest("run-a") == captured.value.result.manifest
+        assert tuple(event_store.list_events("run-a")) == captured.value.result.events
 
 
 def test_guarded_recovery_accepts_a_validated_terminal_reason(tmp_path: Path) -> None:

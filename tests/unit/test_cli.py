@@ -14,7 +14,14 @@ from guildmind.sandbox import (
     DockerHostPolicy,
     SandboxSelfTestReport,
 )
-from guildmind.storage import EventStore, VerifiedRunRoot
+from guildmind.storage import (
+    MAINTENANCE_LOCK_FILENAME,
+    EventStore,
+    MaintenanceIntegrityError,
+    MaintenanceIntegrityReason,
+    MaintenanceLease,
+    VerifiedRunRoot,
+)
 
 _REPOSITORY_ROOT = Path(__file__).parents[2]
 _FIXTURE = _REPOSITORY_ROOT / "fixtures" / "001-python-addition"
@@ -72,6 +79,47 @@ def test_evaluate_command_runs_the_known_solution(
     assert response["status"] == "passed"
 
 
+def test_run_command_reports_postcommit_maintenance_failure_with_durable_result(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_directory = tmp_path / "state"
+    real_close = MaintenanceLease.close
+
+    def close_then_report_integrity_failure(lease: MaintenanceLease) -> None:
+        real_close(lease)
+        raise MaintenanceIntegrityError(
+            MaintenanceIntegrityReason.LOCK_CHANGED,
+            state_directory=state_directory,
+            detail="injected CLI release-time identity failure",
+        )
+
+    monkeypatch.setattr(MaintenanceLease, "close", close_then_report_integrity_failure)
+    exit_code = main(
+        [
+            "run",
+            str(_FIXTURE),
+            "--state-dir",
+            str(state_directory),
+            "--run-id",
+            "run-cli-postcommit",
+        ]
+    )
+
+    response = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert response["error"] == "run_committed_maintenance_release_failed"
+    assert response["schema_version"] == "guildmind.run-postcommit/v1"
+    assert response["run_id"] == "run-cli-postcommit"
+    assert response["status"] == "succeeded"
+    with EventStore.open_existing_read_only(
+        state_directory / "runs.db",
+        trusted_base=state_directory.parent,
+    ) as event_store:
+        assert event_store.load_manifest("run-cli-postcommit").status.value == "succeeded"
+
+
 def test_recover_command_is_idempotent_for_a_terminal_run(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -117,6 +165,57 @@ def test_recover_command_is_idempotent_for_a_terminal_run(
     assert response["run_id"] == "run-cli-recover"
     assert response["status"] == "succeeded"
     assert response["terminal_reason"] is None
+
+
+def test_recover_command_reports_postcommit_maintenance_failure_with_durable_result(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_directory = tmp_path / "state"
+    run_id = "run-cli-recover-postcommit"
+    assert (
+        main(
+            [
+                "run",
+                str(_FIXTURE),
+                "--state-dir",
+                str(state_directory),
+                "--run-id",
+                run_id,
+            ]
+        )
+        == 0
+    )
+    capsys.readouterr()
+    real_close = MaintenanceLease.close
+
+    def close_then_report_integrity_failure(lease: MaintenanceLease) -> None:
+        real_close(lease)
+        raise MaintenanceIntegrityError(
+            MaintenanceIntegrityReason.LOCK_CHANGED,
+            state_directory=state_directory,
+            detail="injected recovery CLI release-time identity failure",
+        )
+
+    monkeypatch.setattr(MaintenanceLease, "close", close_then_report_integrity_failure)
+
+    exit_code = main(["recover", run_id, "--state-dir", str(state_directory)])
+
+    response = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert response["error"] == "recovery_committed_maintenance_release_failed"
+    assert response["schema_version"] == "guildmind.recovery-postcommit/v1"
+    assert response["run_id"] == run_id
+    assert response["status"] == "succeeded"
+    assert response["terminal_reason"] is None
+    assert response["event_count"] > 0
+    assert len(response["semantic_digest"]) == 64
+    with EventStore.open_existing_read_only(
+        state_directory / "runs.db",
+        trusted_base=state_directory.parent,
+    ) as event_store:
+        assert event_store.load_manifest(run_id).status.value == "succeeded"
 
 
 def test_recover_command_absent_state_returns_stable_denial_without_creation(
@@ -166,7 +265,7 @@ def test_recover_command_rejects_state_directory_symlink_without_target_mutation
     assert _regular_file_bytes(target_state) == target_before
 
 
-def test_recover_command_unknown_run_returns_stable_denial_without_mutation(
+def test_recover_command_unknown_run_only_creates_persistent_coordination_lock(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -186,7 +285,11 @@ def test_recover_command_unknown_run_returns_stable_denial_without_mutation(
         "schema_version": "guildmind.recovery-denial/v1",
         "storage_state": "healthy",
     }
-    assert _regular_file_bytes(state_directory) == before
+    after = _regular_file_bytes(state_directory)
+    assert after[MAINTENANCE_LOCK_FILENAME] == b""
+    assert {
+        name: contents for name, contents in after.items() if name != MAINTENANCE_LOCK_FILENAME
+    } == (before)
 
 
 @pytest.mark.parametrize("command", ["replay", "report"])

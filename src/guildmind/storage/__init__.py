@@ -22,8 +22,20 @@ from guildmind.storage.integrity import (
     ReachableArtifact,
     audit_artifact_store,
 )
+from guildmind.storage.maintenance import (
+    MAINTENANCE_LOCK_FILENAME,
+    QUARANTINE_ACTIVE_RELATIVE_PATH,
+    MaintenanceBusyError,
+    MaintenanceBusyReason,
+    MaintenanceIntegrityError,
+    MaintenanceIntegrityReason,
+    MaintenanceLease,
+    MaintenanceLeaseMode,
+)
 
 __all__ = [
+    "MAINTENANCE_LOCK_FILENAME",
+    "QUARANTINE_ACTIVE_RELATIVE_PATH",
     "ArtifactAudit",
     "ArtifactCorruptionError",
     "ArtifactFinding",
@@ -31,6 +43,12 @@ __all__ = [
     "ArtifactOwner",
     "EventStore",
     "FileArtifactStore",
+    "MaintenanceBusyError",
+    "MaintenanceBusyReason",
+    "MaintenanceIntegrityError",
+    "MaintenanceIntegrityReason",
+    "MaintenanceLease",
+    "MaintenanceLeaseMode",
     "ReachableArtifact",
     "StorageIntegrityReport",
     "StorageIntegrityState",

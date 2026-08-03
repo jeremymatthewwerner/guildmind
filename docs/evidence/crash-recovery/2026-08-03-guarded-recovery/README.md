@@ -11,25 +11,31 @@ local fixture state<br>
 `recover_existing_fixture_run()` and `guildmind recover` no longer treat an ordinary
 create-or-open handle or a caller-supplied audit report as authority. Each attempt:
 
-1. captures identities for the configured parent, state directory, database, artifact
+1. acquires the cooperative shared state-wide maintenance lease before its authoritative
+   audit; a missing, non-directory, or symlinked state leaf remains no-create, while any
+   existing real state directory with a usable lock path may gain and synchronize the
+   persistent coordination lock before later classification or denial;
+2. captures identities for the configured parent, state directory, database, artifact
    root, and SQLite sidecars; state/database/artifact links are rejected while explicit
    trusted-base handling preserves ordinary operating-system path aliases;
-2. performs a fresh existing-only all-run SQLite and recursive CAS audit;
-3. requires verified references and confirms that the requested run belongs to the
+3. performs a fresh existing-only all-run SQLite and recursive CAS audit;
+4. requires verified references and confirms that the requested run belongs to the
    audited ledger snapshot before opening a writer;
-4. opens the database with SQLite `mode=rw` without creating or migrating storage;
-5. recomputes the complete ledger commitment inside `BEGIN IMMEDIATE`, re-audits all
+5. opens the database with SQLite `mode=rw` without creating or migrating storage;
+6. recomputes the complete ledger commitment inside `BEGIN IMMEDIATE`, re-audits all
    reachable CAS bytes against those writer-locked roots, and checks the configured path
    identities around that audit;
-6. stages conservative recovery only after those checks, validates the complete ledger,
+7. stages conservative recovery only after those checks, validates the complete ledger,
    captures the recovered manifest and event stream inside the same transaction, and
    invokes the recursive-CAS/path guard a second time against the post-mutation roots at
    the final pre-commit boundary; and
-7. returns that replay-valid terminal stream only after the final guard and commit
+8. returns that replay-valid terminal stream only after the final guard and commit
    succeed. Repeating recovery on the terminal run is an exact no-op.
 
 No failed precondition commits a recovery mutation; a failure inside the writer window
-rolls that SQLite transaction back. Missing or corrupt referenced bytes, an unknown run,
+rolls that SQLite transaction back. The persistent empty lease inode is coordination
+metadata rather than ledger/CAS initialization, so a valid existing state can gain it
+even when an unknown run is then denied. Missing or corrupt referenced bytes, an unknown run,
 a changed all-run ledger, altered recursive bytes, or deterministic replacement of the
 trusted parent/state/database/artifact path is denied before a recovery terminal is
 committed. Existing unreferenced finalized blobs are not adopted, deleted, or moved.
@@ -93,33 +99,44 @@ transactional evaluation completion; guarded runner exceptions and budget refusa
 conservative late-budget recovery; equal-content path replacement; stable CLI denials;
 existing-only `replay`/`report`; and no-create behavior.
 
-The final full repository test run reported:
+The original guarded-recovery checkpoint's full repository test run reported:
 
 ```text
 487 passed, 28 skipped
 ```
 
+After the atomic-publication and maintenance-lease prerequisites were integrated, the
+complete repository gate reported `548 passed, 28 skipped in 7.34s`, with formatting,
+lint, and mypy also passing.
+
 These are focused and repository-wide development results, not the predeclared
 normal-fixture reliability campaign.
 
-## Quiescence and same-UID boundary
+## Cooperative maintenance and same-UID boundary
 
-Authoritative use still requires a quiescent exclusive-writer maintenance window.
-`BEGIN IMMEDIATE` excludes cooperating SQLite writers, and identity/hard-link checks
-close the deterministic replacement cases tested here. They do not make separate
+The subsequent [maintenance-lease checkpoint](../../storage-integrity/2026-08-03-maintenance-lease/README.md)
+implements the cooperative maintenance boundary for supported high-level paths. Fixture
+publication and guarded terminalization hold shared mode, while future state-wide
+maintenance must hold exclusive mode. Shared recovery is not quiescent against another
+shared publisher. Its narrower mutation is safe because it never acts on ownerless audit
+findings and revalidates the complete ledger and reachable CAS graph under
+`BEGIN IMMEDIATE`, which excludes cooperating SQLite writers. Quarantine authority must
+instead hold an exclusive maintenance lease across a fresh audit and candidate
+revalidation. Identity/hard-link checks close the deterministic replacement cases tested
+here. These controls do not make separate
 pathname observation, open, CAS traversal, and precommit checks one atomic operating-
 system operation. A concurrently hostile process running as the same OS user can mutate
-or swap files between individual checks and may race this protocol. Guildmind therefore
-does not claim protection from an actively racing same-UID process or a hostile local
-co-tenant. Descriptor-relative traversal or an equivalent maintenance lock remains the
-stronger future boundary.
+or swap files between individual checks, ignore `flock`, or bypass the high-level API.
+Guildmind therefore does not claim protection from an actively racing same-UID process
+or a hostile local co-tenant. Direct low-level store callers remain responsible for
+participating in the lease protocol.
 
 ## Remaining Stage 1 gates
 
 - implement resumable, crash-safe quarantine; this checkpoint deliberately preserves
   all unreferenced blobs;
-- inject kills throughout CAS temporary write, file `fsync`, no-replace publication,
-  directory `fsync`, and quarantine moves;
+- extend the six exact atomic publication kills with CAS temporary creation/partial
+  write/file `fsync`, remaining durability boundaries, and quarantine moves;
 - stress cooperative concurrent writers, open-process recovery, and CAS publication
   races;
 - exercise real-provider idempotency, status polling, SDK retry suppression,

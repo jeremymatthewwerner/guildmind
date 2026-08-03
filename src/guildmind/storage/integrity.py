@@ -5,10 +5,13 @@ This module validates those root identities again, never mutates either store, v
 direct manifest references, follows only the two fixed structured artifact roles
 understood today, and inventories the CAS without following symlinks.
 
-Correct use currently requires one quiescent, exclusive-writer maintenance window
-spanning ledger snapshot verification through the completed CAS scan.  The audit is
-read-only, but its result cannot authorize later mutation if concurrent or out-of-band
-actors can change paths during that window.
+Using an audit to authorize quarantine requires one exclusive maintenance window from
+ledger snapshot verification through the completed CAS scan. Guarded terminalization
+may audit under shared mode only because it never acts on ownerless findings and
+revalidates the complete ledger/reachable graph under SQLite's writer lock before and
+after staging. Direct low-level callers must establish the appropriate boundary. The
+audit is read-only, but its result cannot authorize later mutation if concurrent or
+out-of-band actors can change paths during that window.
 
 ``complete`` means the bounded filesystem inventory itself completed.  A complete
 audit can still contain integrity findings.  ``quarantine_allowed`` additionally
