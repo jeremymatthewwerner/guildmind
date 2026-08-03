@@ -252,6 +252,60 @@ def test_event_store_persists_hash_chain_manifest_budget_and_replay(tmp_path: Pa
     assert state.evaluation_outcome == "passed"
 
 
+def test_complete_evaluation_with_events_captures_stream_inside_transaction(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database = tmp_path / "runs.db"
+    maximum = BudgetUsage(output_tokens=20, model_calls=1)
+    actual = BudgetUsage(output_tokens=8, model_calls=1)
+    with EventStore(database, clock=DeterministicClock(started_at=START)) as store:
+        running_run(store, "run-a")
+        store.record_artifact("run-a", "task_spec", artifact("a" * 64))
+        store.start_model_request(
+            run_id="run-a",
+            request_id="model-request-0001",
+            maximum=maximum,
+            budget_used=BudgetUsage(),
+            budget_reserved=maximum,
+        )
+        store.complete_model_response(
+            run_id="run-a",
+            request_id="model-request-0001",
+            returned_model="fake-model-v1",
+            actual_usage=actual,
+            patch=artifact("b" * 64),
+            budget_used=actual,
+            budget_reserved=BudgetUsage(),
+        )
+
+        def reject_public_observation(_run_id: str) -> list[EventRecord]:
+            raise sqlite3.OperationalError("public event observation must not follow commit")
+
+        monkeypatch.setattr(store, "list_events", reject_public_observation)
+        completed = store.complete_evaluation_with_events(
+            run_id="run-a",
+            artifacts={
+                "evaluation_stdout": artifact("c" * 64),
+                "evaluation_stderr": artifact("d" * 64),
+                "evaluation": artifact("e" * 64),
+            },
+            evaluation_payload={"outcome": "passed", "result_sha256": "f" * 64},
+            status=RunStatus.SUCCEEDED,
+            finished_at=START + timedelta(seconds=2),
+            terminal_reason=None,
+            budget_used=actual,
+            budget_reserved=BudgetUsage(),
+        )
+
+    with EventStore.open_existing_read_only(database, trusted_base=tmp_path) as reader:
+        persisted_events = tuple(reader.list_events("run-a"))
+
+    assert completed.manifest.status is RunStatus.SUCCEEDED
+    assert completed.events == persisted_events
+    assert completed.events[-1].event_type == "run.terminal"
+
+
 def test_event_store_verifies_connection_settings_and_returns_stable_roots(
     tmp_path: Path,
 ) -> None:
@@ -571,6 +625,133 @@ def test_existing_writable_store_performs_snapshot_guarded_recovery(tmp_path: Pa
 
     assert recovered.status is RunStatus.INFRASTRUCTURE_ERROR
     assert recovered.terminal_reason == "interrupted_run_recovered"
+
+
+def test_recovery_integrity_guard_receives_locked_roots_and_rolls_back(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "runs.db"
+    with EventStore(database, clock=DeterministicClock(started_at=START)) as writer:
+        running_run(writer, "run-a")
+        events_before = writer.list_events("run-a")
+        roots = writer.verify_integrity()
+    expected_snapshot_sha256 = verified_run_roots_sha256(roots)
+
+    class GuardRejected(RuntimeError):
+        pass
+
+    observed_roots: list[tuple[VerifiedRunRoot, ...]] = []
+    with EventStore.open_existing_writable(
+        database,
+        clock=DeterministicClock(started_at=START),
+        trusted_base=tmp_path,
+    ) as recovery_store:
+
+        def reject(locked_roots: tuple[VerifiedRunRoot, ...]) -> None:
+            assert recovery_store._connection.in_transaction
+            observed_roots.append(locked_roots)
+            raise GuardRejected("referenced evidence changed")
+
+        with pytest.raises(GuardRejected, match="referenced evidence changed"):
+            recovery_store.recover_run(
+                "run-a",
+                finished_at=START + timedelta(seconds=2),
+                expected_snapshot_sha256=expected_snapshot_sha256,
+                integrity_guard=reject,
+            )
+
+        assert recovery_store.list_events("run-a") == events_before
+
+    assert observed_roots == [roots]
+
+
+def test_recover_run_with_events_captures_stream_and_rechecks_guard_before_commit(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "runs.db"
+    with EventStore(database, clock=DeterministicClock(started_at=START)) as writer:
+        running_run(writer, "run-a")
+        roots_before = writer.verify_integrity()
+    expected_snapshot_sha256 = verified_run_roots_sha256(roots_before)
+    observed_roots: list[tuple[VerifiedRunRoot, ...]] = []
+
+    with EventStore.open_existing_writable(
+        database,
+        clock=DeterministicClock(started_at=START),
+        trusted_base=tmp_path,
+    ) as recovery_store:
+
+        def observe(locked_roots: tuple[VerifiedRunRoot, ...]) -> None:
+            assert recovery_store._connection.in_transaction
+            observed_roots.append(locked_roots)
+
+        recovered = recovery_store.recover_run_with_events(
+            "run-a",
+            finished_at=START + timedelta(seconds=2),
+            expected_snapshot_sha256=expected_snapshot_sha256,
+            integrity_guard=observe,
+        )
+
+    with EventStore.open_existing_read_only(database, trusted_base=tmp_path) as reader:
+        persisted_events = tuple(reader.list_events("run-a"))
+        persisted_roots = reader.verify_integrity()
+
+    assert recovered.manifest.status is RunStatus.INFRASTRUCTURE_ERROR
+    assert recovered.events == persisted_events
+    assert recovered.events[-1].event_type == "run.terminal"
+    assert observed_roots == [roots_before, persisted_roots]
+    assert observed_roots[1][0].event_count > observed_roots[0][0].event_count
+
+
+def test_recovery_integrity_guard_requires_a_snapshot_precondition(tmp_path: Path) -> None:
+    database = tmp_path / "runs.db"
+    with EventStore(database, clock=DeterministicClock(started_at=START)) as writer:
+        running_run(writer, "run-a")
+
+        with pytest.raises(ValueError, match="requires expected_snapshot_sha256"):
+            writer.recover_run(
+                "run-a",
+                finished_at=START + timedelta(seconds=2),
+                integrity_guard=lambda roots: None,
+            )
+
+
+def test_complete_budget_exhaustion_with_events_rechecks_guard_and_captures_stream(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "runs.db"
+    with EventStore(database, clock=DeterministicClock(started_at=START)) as writer:
+        running_run(writer, "run-a")
+        writer.record_artifact("run-a", "task_spec", artifact("a" * 64))
+        roots_before = writer.verify_integrity()
+    expected_snapshot_sha256 = verified_run_roots_sha256(roots_before)
+    observed_roots: list[tuple[VerifiedRunRoot, ...]] = []
+
+    with EventStore.open_existing_writable(
+        database,
+        clock=DeterministicClock(started_at=START),
+        trusted_base=tmp_path,
+    ) as terminalization_store:
+
+        def observe(locked_roots: tuple[VerifiedRunRoot, ...]) -> None:
+            assert terminalization_store._connection.in_transaction
+            observed_roots.append(locked_roots)
+
+        terminalized = terminalization_store.complete_budget_exhaustion_with_events(
+            "run-a",
+            finished_at=START + timedelta(seconds=2),
+            expected_snapshot_sha256=expected_snapshot_sha256,
+            integrity_guard=observe,
+        )
+
+    with EventStore.open_existing_read_only(database, trusted_base=tmp_path) as reader:
+        persisted_events = tuple(reader.list_events("run-a"))
+        persisted_roots = reader.verify_integrity()
+
+    assert terminalized.manifest.status is RunStatus.BUDGET_EXHAUSTED
+    assert terminalized.events == persisted_events
+    assert terminalized.events[-1].event_type == "run.terminal"
+    assert observed_roots == [roots_before, persisted_roots]
 
 
 def test_existing_writable_store_never_creates_missing_or_empty_database(

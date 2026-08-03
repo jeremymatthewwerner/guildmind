@@ -145,13 +145,14 @@ audit safely without confusing absent storage with an empty ledger:
 - An optional `recover_run(expected_snapshot_sha256=...)` precondition recomputes the
   complete verified ledger commitment inside `BEGIN IMMEDIATE` before any lifecycle
   SQL. Recovery revalidates the complete ledger again after staging its changes and
-  before commit, rolling back cross-run damage. Runtime integration must always supply
-  the precondition; omission remains only for existing same-connection internal
-  terminalization paths.
+  before commit, rolling back cross-run damage. At this intermediate follow-up, runtime
+  integration still needed to supply the precondition and same-connection exception
+  terminalization had not yet been routed through it.
 
-The expanded repository gate passed with 439 tests and the same 28 declared skips.
-External `FixtureRunner`/CLI recovery is not yet routed through these controls in this
-follow-up, so the **NOT PASSED** verdict and the remaining-work list above still apply.
+The expanded repository gate passed with 439 tests and the same 28 declared skips. At
+this no-create follow-up, external `FixtureRunner`/CLI recovery was not yet routed
+through these controls, so the **NOT PASSED** verdict and the remaining-work list above
+still applied.
 
 Follow-up adversarial review reproduced and closed false-safe cases involving
 hard-linked databases and sidecars, replacement of a controlled ancestor while the
@@ -163,3 +164,29 @@ true rollback-journal-mode database misreported through an immutable reader. The
 remaining path check/open and precommit windows are not atomic against an actively
 racing same-user process; the documented quiescent exclusive-writer requirement still
 applies.
+
+## 2026-08-03 guarded recovery follow-up
+
+The next [guarded-recovery checkpoint](../../crash-recovery/2026-08-03-guarded-recovery/README.md)
+now consumes this audit from explicit local-fixture recovery. It performs a fresh
+existing-only coordinator audit, requires the requested run in the verified snapshot,
+and then recomputes the complete ledger commitment and recursive CAS audit inside the
+SQLite writer transaction before staging recovery. After staging, it validates the full
+ledger and repeats the recursive CAS/path guard against the post-mutation roots at the
+final pre-commit boundary. The recovered manifest and event stream are captured inside
+that transaction; SQLite writer failures are normalized to a typed denial. The
+`FixtureRunner` exception path now closes its ordinary writer and invokes this same
+guarded existing-only recovery. Pre-dispatch budget refusal uses the same fresh audit and
+dual writer-window guard; a budget error after dispatch receives conservative general
+recovery. Normal evaluation completion and guarded terminalization capture their returned
+manifest/event stream within their write transaction. `replay` and `report` use
+existing-only read-only SQLite inspection and do not create missing state.
+
+The expanded focused terminalization/inspection slice passed 51 cases with 131
+deselected in 1.09s. The final full repository test run passed 487 cases with 28 declared
+skips.
+
+That integration does not move the orphans classified here and does not remove this
+document's quiescent same-UID boundary. Resumable quarantine, CAS publication kill
+points, concurrency stress, provider behavior, reference-host repetition, and the 99%
+normal-fixture campaign remain open; Stage 1 is still **NOT PASSED**.

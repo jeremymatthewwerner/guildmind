@@ -33,6 +33,7 @@ from guildmind.domain import (
 from guildmind.evaluation import LocalEvaluationResult, LocalEvaluationSpec
 from guildmind.models import ModelClient, ModelResponse, ScriptedPatchModel
 from guildmind.runtime import DeterministicClock, replay_events
+from guildmind.runtime.recovery import recover_existing_fixture_run
 from guildmind.runtime.runner import FixtureRunner
 from guildmind.storage import EventStore, FileArtifactStore
 
@@ -288,16 +289,22 @@ def test_fixture_runner_recovers_real_process_crashes_at_external_boundaries(
     assert manifest_before.status is RunStatus.RUNNING
     assert sum(event.event_type == "run.terminal" for event in prefix) == 0
 
-    recovery_runner = FixtureRunner(
+    first_recovery = recover_existing_fixture_run(
         state_directory=state_directory,
+        run_id=run_id,
         clock=DeterministicClock(started_at=_START + timedelta(hours=1)),
     )
-    recovered = recovery_runner.recover(run_id)
+    recovered = first_recovery.manifest
     with EventStore(database) as store:
         events_after_first_recovery = store.list_events(run_id)
         used_after, reserved_after = store.load_budget_state(run_id)
 
-    recovered_again = recovery_runner.recover(run_id)
+    second_recovery = recover_existing_fixture_run(
+        state_directory=state_directory,
+        run_id=run_id,
+        clock=DeterministicClock(started_at=_START + timedelta(hours=2)),
+    )
+    recovered_again = second_recovery.manifest
     with EventStore(database) as store:
         final_events = store.list_events(run_id)
         final_manifest = store.load_manifest(run_id)

@@ -21,6 +21,10 @@ from guildmind.models import ModelClient
 from guildmind.runtime.budget import BudgetAuthority, BudgetExceededError
 from guildmind.runtime.clock import Clock, SystemClock
 from guildmind.runtime.fixture import materialize_fixture_task
+from guildmind.runtime.recovery import (
+    recover_existing_fixture_run,
+    terminalize_existing_fixture_budget_refusal,
+)
 from guildmind.runtime.replay import ReplayState, replay_events, semantic_digest
 from guildmind.storage import ArtifactCorruptionError, EventStore, FileArtifactStore
 
@@ -101,9 +105,12 @@ class FixtureRunner:
             created_at=created_at,
         )
 
-        with EventStore(database_path, clock=self.clock) as event_store:
-            event_store.create_run(pending)
-            try:
+        run_created = False
+        reservation_refused = False
+        try:
+            with EventStore(database_path, clock=self.clock) as event_store:
+                event_store.create_run(pending)
+                run_created = True
                 started_at = self.clock.stamp().occurred_at
                 event_store.start_run(
                     run_id,
@@ -114,7 +121,11 @@ class FixtureRunner:
 
                 reservation_id = "model-request-0001"
                 maximum_usage = model.maximum_usage
-                authority.reserve(reservation_id, maximum_usage)
+                try:
+                    authority.reserve(reservation_id, maximum_usage)
+                except BudgetExceededError:
+                    reservation_refused = True
+                    raise
                 event_store.start_model_request(
                     run_id=run_id,
                     request_id=reservation_id,
@@ -192,7 +203,7 @@ class FixtureRunner:
                 terminal_reason = None
                 if terminal_status is not RunStatus.SUCCEEDED:
                     terminal_reason = local_result.status.value
-                final_manifest = event_store.complete_evaluation(
+                terminal = event_store.complete_evaluation_with_events(
                     run_id=run_id,
                     artifacts=evaluation_artifacts,
                     evaluation_payload={
@@ -207,26 +218,39 @@ class FixtureRunner:
                     budget_used=authority.used,
                     budget_reserved=authority.reserved,
                 )
-                events = event_store.list_events(run_id)
-            except BudgetExceededError as error:
-                try:
-                    event_store.complete_budget_exhaustion(
-                        run_id,
-                        finished_at=self.clock.stamp().occurred_at,
+                final_manifest = terminal.manifest
+                events = list(terminal.events)
+        except BudgetExceededError as error:
+            try:
+                if reservation_refused:
+                    terminalize_existing_fixture_budget_refusal(
+                        state_directory=self.state_directory,
+                        run_id=run_id,
+                        clock=self.clock,
                     )
-                except BaseException as recovery_error:
-                    error.add_note(f"budget terminalization also failed: {recovery_error!r}")
-                raise
-            except BaseException as error:
+                elif run_created:
+                    recover_existing_fixture_run(
+                        state_directory=self.state_directory,
+                        run_id=run_id,
+                        clock=self.clock,
+                        terminal_reason="runner_exception",
+                    )
+            except BaseException as terminalization_error:
+                action = "budget terminalization" if reservation_refused else "run recovery"
+                error.add_note(f"{action} also failed: {terminalization_error!r}")
+            raise
+        except BaseException as error:
+            if run_created:
                 try:
-                    event_store.recover_run(
-                        run_id,
-                        finished_at=self.clock.stamp().occurred_at,
+                    recover_existing_fixture_run(
+                        state_directory=self.state_directory,
+                        run_id=run_id,
+                        clock=self.clock,
                         terminal_reason="runner_exception",
                     )
                 except BaseException as recovery_error:
                     error.add_note(f"run recovery also failed: {recovery_error!r}")
-                raise
+            raise
 
         replay = replay_events(events, require_terminal=True)
         return FixtureRunResult(
@@ -239,17 +263,6 @@ class FixtureRunner:
             database_path=database_path,
             artifact_root=artifact_root,
         )
-
-    def recover(self, run_id: str) -> RunManifest:
-        """Explicitly terminalize a previously interrupted run without retrying it."""
-
-        self._verify_state_directory_identity()
-        database_path = self.state_directory / "runs.db"
-        with EventStore(database_path, clock=self.clock) as event_store:
-            return event_store.recover_run(
-                run_id,
-                finished_at=self.clock.stamp().occurred_at,
-            )
 
     def _verify_state_directory_identity(self) -> None:
         if _directory_identity(self.state_directory) != self._state_directory_identity:

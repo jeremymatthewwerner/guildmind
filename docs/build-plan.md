@@ -527,13 +527,33 @@ Run one deterministic task through a complete isolated lifecycle and reproduce t
 - A scripted fake model for zero-cost deterministic tests.
 - Rootless Docker sandbox with no network, read-only base filesystem, dropped capabilities, bounded CPU/memory/processes/disk/output/time, and no host secrets.
 - Separate evaluator that applies a patch to a fresh image and emits a result.
-- Initial CLI: `doctor`, `run`, `evaluate`, `replay`, and `report`.
+- Initial CLI: `doctor`, `run`, `evaluate`, `replay`, `report`, and explicit guarded
+  `recover`. Recovery and inspection open only existing storage; missing or invalid
+  state is a typed denial, never an instruction to initialize it.
 
 #### Verification
 
 - Run the same fixture 100 times with deterministic IDs and a fake clock, or compare a normalized semantic/replay digest that excludes run-specific timestamps and IDs.
 - Inject timeouts, malformed tool calls, killed containers, provider errors, disk failures, and evaluator failures.
 - Verify that every run reaches one terminal status and retains spend up to failure.
+- Kill a process at committed, pre-commit, and external-work boundaries; require a fresh
+  all-run ledger/recursive-CAS audit, writer-window validation before staging, and a
+  second recursive-CAS/path guard at the final pre-commit boundary. Capture the returned
+  manifest and replay-valid terminal stream inside that transaction, make a second
+  recovery an exact no-op, and never redispatch model/evaluator work. Missing storage,
+  corrupt referenced bytes, path replacement, a changed ledger, or a SQLite writer
+  failure must produce a typed denial without a recovery mutation.
+- Route exceptions raised after `FixtureRunner` creates a run through the same guarded,
+  existing-only recovery entry point; corrupt evidence must remain nonterminal and fail
+  closed rather than being papered over by exception cleanup.
+- Use that full guard for pre-dispatch budget-refusal terminalization, and use general
+  conservative recovery if a budget error occurs after dispatch has begun. Successful
+  evaluation completion and every guarded terminalization must return the manifest and
+  event stream captured inside its write transaction, without a fallible post-commit
+  read to assemble the public result.
+- Prove `replay` and `report` use existing-only read handles, hold a verified ledger
+  snapshot while reading, reject configured links/replacement, and create no state for a
+  missing directory or database.
 - Attempt to access hidden tests, network, host filesystem, credentials, and Docker socket from the worker.
 - Attempt to recover a planted future solution from `.git` refs, packed refs, tags, reflogs, and unreachable objects; the worker bundle must contain none of them.
 - Preserve and rerun the exact OCI image digest to confirm evaluator consistency; separately rebuild from pinned definitions to detect supply-chain drift without calling the rebuild identical.

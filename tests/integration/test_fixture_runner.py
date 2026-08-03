@@ -18,9 +18,21 @@ from guildmind.evaluation import (
     LocalEvaluator,
 )
 from guildmind.models import ModelResponse, ScriptedPatchModel
-from guildmind.runtime import BudgetExceededError, DeterministicClock, replay_events
+from guildmind.runtime import (
+    BudgetAuthority,
+    BudgetExceededError,
+    DeterministicClock,
+    replay_events,
+)
+from guildmind.runtime.recovery import recover_existing_fixture_run
 from guildmind.runtime.runner import FixtureRunner, FixtureRunResult
-from guildmind.storage import ArtifactCorruptionError, EventStore, FileArtifactStore
+from guildmind.storage import (
+    ArtifactCorruptionError,
+    EventStore,
+    FileArtifactStore,
+    StorageIntegrityState,
+    audit_storage,
+)
 
 _REPOSITORY_ROOT = Path(__file__).parents[2]
 _FIXTURE = _REPOSITORY_ROOT / "fixtures" / "001-python-addition"
@@ -61,6 +73,16 @@ class RaisingModel:
 
     def propose_patch(self, problem_statement: str) -> ModelResponse:
         raise RuntimeError("simulated provider failure after dispatch")
+
+
+class LateBudgetErrorModel(RaisingModel):
+    @property
+    def model_id(self) -> str:
+        return "guildmind/fake-late-budget-error-model-v1"
+
+    def propose_patch(self, problem_statement: str) -> ModelResponse:
+        del problem_statement
+        raise BudgetExceededError(("late_model_error",))
 
 
 class IdentifiedLocalEvaluator(LocalEvaluator):
@@ -132,6 +154,31 @@ class PatchIdentityRecordingEvaluator(IdentifiedLocalEvaluator):
         )
 
 
+class CorruptingRaisingEvaluator(IdentifiedLocalEvaluator):
+    def evaluate(
+        self,
+        spec: LocalEvaluationSpec,
+        patch_path: Path,
+        *,
+        expected_patch_sha256: str | None = None,
+    ) -> LocalEvaluationResult:
+        del spec, expected_patch_sha256
+        patch_path.write_bytes(b"corrupted after its ledger reference committed")
+        raise RuntimeError("simulated evaluator failure after corrupting evidence")
+
+
+class RaisingEvaluator(IdentifiedLocalEvaluator):
+    def evaluate(
+        self,
+        spec: LocalEvaluationSpec,
+        patch_path: Path,
+        *,
+        expected_patch_sha256: str | None = None,
+    ) -> LocalEvaluationResult:
+        del spec, patch_path, expected_patch_sha256
+        raise RuntimeError("simulated evaluator failure with intact evidence")
+
+
 def test_local_evaluation_result_rejects_a_scorer_only_transcript() -> None:
     with pytest.raises(ValueError, match="scorer transcript requires a candidate"):
         LocalEvaluationResult(
@@ -153,7 +200,7 @@ def run_fixture(state_directory: Path, run_id: str, *, day_offset: int = 0) -> F
     )
 
 
-def test_fixture_runner_rejects_state_replacement_before_run_or_recovery(
+def test_fixture_runner_rejects_state_replacement_before_run(
     tmp_path: Path,
 ) -> None:
     configured_state = tmp_path / "state"
@@ -168,8 +215,6 @@ def test_fixture_runner_rejects_state_replacement_before_run_or_recovery(
     sentinel.write_bytes(b"unchanged")
     configured_state.symlink_to(outside, target_is_directory=True)
 
-    with pytest.raises(ArtifactCorruptionError, match="not a real directory"):
-        runner.recover("missing-run")
     with pytest.raises(ArtifactCorruptionError, match="not a real directory"):
         runner.run(
             fixture_root=_FIXTURE,
@@ -385,10 +430,185 @@ def test_raising_model_is_terminalized_as_ambiguous_and_recovery_is_idempotent(
     assert "model.response_completed" not in {event.event_type for event in events_before}
     assert "evaluation.completed" not in {event.event_type for event in events_before}
 
-    assert runner.recover("run-ambiguous") == manifest
-    assert runner.recover("run-ambiguous") == manifest
+    first_recovery = recover_existing_fixture_run(
+        state_directory=state_directory,
+        run_id="run-ambiguous",
+        clock=clock,
+    )
+    second_recovery = recover_existing_fixture_run(
+        state_directory=state_directory,
+        run_id="run-ambiguous",
+        clock=clock,
+    )
+    assert first_recovery.manifest == manifest
+    assert second_recovery == first_recovery
+    assert first_recovery.events == tuple(events_before)
     with EventStore(database) as store:
         assert store.list_events("run-ambiguous") == events_before
+
+
+def test_runner_exception_recovery_refuses_to_terminalize_corrupt_evidence(
+    tmp_path: Path,
+) -> None:
+    state_directory = tmp_path / "state"
+    runner = FixtureRunner(
+        state_directory=state_directory,
+        clock=DeterministicClock(started_at=_START),
+        evaluator=CorruptingRaisingEvaluator(),
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="simulated evaluator failure after corrupting evidence",
+    ) as captured:
+        runner.run(
+            fixture_root=_FIXTURE,
+            model=ScriptedPatchModel(_FIXTURE / "solution.patch"),
+            run_id="run-corrupt-evidence",
+            code_revision="test-revision",
+        )
+
+    assert any(
+        "referenced_evidence_invalid" in note for note in getattr(captured.value, "__notes__", ())
+    )
+    with EventStore.open_existing_read_only(
+        state_directory / "runs.db",
+        trusted_base=state_directory.parent,
+    ) as store:
+        manifest = store.load_manifest("run-corrupt-evidence")
+        events = store.list_events("run-corrupt-evidence")
+    assert manifest.status is RunStatus.RUNNING
+    assert all(event.event_type != "run.terminal" for event in events)
+    assert audit_storage(state_directory).state is StorageIntegrityState.REFERENCED_EVIDENCE_INVALID
+
+
+def test_runner_exception_recovery_terminalizes_only_after_guarded_audit(
+    tmp_path: Path,
+) -> None:
+    state_directory = tmp_path / "state"
+    runner = FixtureRunner(
+        state_directory=state_directory,
+        clock=DeterministicClock(started_at=_START),
+        evaluator=RaisingEvaluator(),
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="simulated evaluator failure with intact evidence",
+    ):
+        runner.run(
+            fixture_root=_FIXTURE,
+            model=ScriptedPatchModel(_FIXTURE / "solution.patch"),
+            run_id="run-guarded-runner-exception",
+            code_revision="test-revision",
+        )
+
+    with EventStore.open_existing_read_only(
+        state_directory / "runs.db",
+        trusted_base=state_directory.parent,
+    ) as store:
+        manifest = store.load_manifest("run-guarded-runner-exception")
+        events = store.list_events("run-guarded-runner-exception")
+    assert manifest.status is RunStatus.INFRASTRUCTURE_ERROR
+    assert manifest.terminal_reason == "runner_exception"
+    assert replay_events(events, require_terminal=True).status is RunStatus.INFRASTRUCTURE_ERROR
+    assert audit_storage(state_directory).state is StorageIntegrityState.HEALTHY
+
+
+def test_late_budget_error_uses_general_guarded_recovery(tmp_path: Path) -> None:
+    state_directory = tmp_path / "state"
+    runner = FixtureRunner(
+        state_directory=state_directory,
+        clock=DeterministicClock(started_at=_START),
+    )
+    model = LateBudgetErrorModel()
+
+    with pytest.raises(BudgetExceededError, match="late_model_error"):
+        runner.run(
+            fixture_root=_FIXTURE,
+            model=model,
+            run_id="run-late-budget-error",
+            code_revision="test-revision",
+        )
+
+    with EventStore.open_existing_read_only(
+        state_directory / "runs.db",
+        trusted_base=state_directory.parent,
+    ) as store:
+        manifest = store.load_manifest("run-late-budget-error")
+        used, reserved = store.load_budget_state("run-late-budget-error")
+        events = store.list_events("run-late-budget-error")
+    assert manifest.status is RunStatus.INFRASTRUCTURE_ERROR
+    assert manifest.terminal_reason == "ambiguous_model_request"
+    assert used == model.maximum_usage
+    assert reserved == BudgetUsage()
+    assert replay_events(events, require_terminal=True).model_request_state == "ambiguous"
+
+
+def test_budget_refusal_guard_rejects_corrupt_recursive_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_directory = tmp_path / "state"
+    runner = FixtureRunner(
+        state_directory=state_directory,
+        clock=DeterministicClock(started_at=_START),
+    )
+
+    def corrupt_repository_then_refuse(
+        _authority: BudgetAuthority,
+        _reservation_id: str,
+        _maximum: BudgetUsage,
+    ) -> None:
+        candidates = tuple((state_directory / "artifacts" / "sha256").glob("*/*"))
+        repository = next(path for path in candidates if b'"files"' in path.read_bytes())
+        repository.write_bytes(b"corrupt recursive repository evidence")
+        raise BudgetExceededError(("model_calls",))
+
+    monkeypatch.setattr(BudgetAuthority, "reserve", corrupt_repository_then_refuse)
+
+    with pytest.raises(BudgetExceededError, match="model_calls") as captured:
+        runner.run(
+            fixture_root=_FIXTURE,
+            model=ScriptedPatchModel(_FIXTURE / "solution.patch"),
+            run_id="run-corrupt-budget-refusal",
+            code_revision="test-revision",
+        )
+
+    assert any(
+        "referenced_evidence_invalid" in note for note in getattr(captured.value, "__notes__", ())
+    )
+    with EventStore.open_existing_read_only(
+        state_directory / "runs.db",
+        trusted_base=state_directory.parent,
+    ) as store:
+        manifest = store.load_manifest("run-corrupt-budget-refusal")
+        events = store.list_events("run-corrupt-budget-refusal")
+    assert manifest.status is RunStatus.RUNNING
+    assert all(event.event_type != "run.terminal" for event in events)
+    assert audit_storage(state_directory).state is StorageIntegrityState.REFERENCED_EVIDENCE_INVALID
+
+
+def test_successful_runner_captures_events_inside_evaluation_transaction(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_directory = tmp_path / "state"
+
+    def reject_postcommit_observation(_store: EventStore, _run_id: str) -> list[object]:
+        raise RuntimeError("public event observation must not follow evaluation commit")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(EventStore, "list_events", reject_postcommit_observation)
+        result = run_fixture(state_directory, "run-transactional-events")
+
+    assert result.manifest.status is RunStatus.SUCCEEDED
+    assert result.events[-1].event_type == "run.terminal"
+    with EventStore.open_existing_read_only(
+        state_directory / "runs.db",
+        trusted_base=state_directory.parent,
+    ) as store:
+        assert tuple(store.list_events("run-transactional-events")) == result.events
 
 
 def test_budget_refusal_is_terminalized_without_dispatch_or_infrastructure_bias(

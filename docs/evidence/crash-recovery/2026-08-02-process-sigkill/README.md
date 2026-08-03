@@ -105,8 +105,8 @@ The following remain open:
 
 - kills during CAS temporary write, file `fsync`, atomic rename, or directory
   `fsync`;
-- startup verification of every referenced CAS byte and reporting/quarantine of
-  orphan temporary and finalized blobs;
+- automatic startup scanning and resumable quarantine of orphan temporary and finalized
+  blobs; explicit recovery-time verification is covered by the later checkpoint below;
 - commit races, cross-process writer exclusion, and open-process/concurrency stress;
 - real-provider idempotency, polling, SDK retry suppression, duplicate-execution
   treatment, and invoice/usage reconciliation;
@@ -116,3 +116,30 @@ The following remain open:
 
 No result here authorizes external repositories, hostile code, arbitrary
 model-generated commands, or provider-backed campaigns.
+
+## 2026-08-03 guarded-recovery integration follow-up
+
+The two real `FixtureRunner` external-work cases now recover through the fresh-audit,
+existing-only path documented in the
+[guarded-recovery checkpoint](../2026-08-03-guarded-recovery/README.md). The later focused
+run proves that these killed processes still reach the same conservative, idempotent,
+replay-valid terminal states while recovery validates the all-run ledger and recursive
+CAS graph before mutation and again at the final pre-commit boundary. The returned
+manifest/event stream is captured inside that transaction rather than observed after
+commit. The other nine cases remain the historical transaction-boundary evidence
+recorded above.
+
+Ordinary `FixtureRunner` exceptions after run creation now use the same guarded path.
+Intact evidence is terminalized with reason `runner_exception`; corrupt referenced
+evidence is left nonterminal and the recovery denial is attached to the original error.
+Pre-dispatch budget refusal also uses guarded existing-only terminalization; a later
+budget error uses conservative general recovery. Successful evaluation completion and
+these terminalization paths capture their returned event streams inside their SQLite
+transactions instead of depending on a separate post-commit read.
+
+The expanded follow-up slice passed 51 cases with 131 deselected in 1.09s; the final full
+repository test run passed 487 cases with 28 declared skips.
+
+This closes the explicit recovery-gating gap for the local fixture path. CAS publication
+kill points, orphan quarantine, same-UID/concurrency stress, provider behavior,
+reference-host repetition, and the 99% normal-fixture campaign remain open.

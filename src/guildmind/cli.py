@@ -8,17 +8,21 @@ import os
 import platform
 import re
 import shutil
+import sqlite3
+import stat
 import subprocess
 import sys
 import uuid
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 from guildmind.domain import export_json_schemas
 from guildmind.evaluation import LocalEvaluator, load_fixture
 from guildmind.models import ScriptedPatchModel
-from guildmind.runtime.replay import replay_events, semantic_digest
+from guildmind.runtime.recovery import RecoveryDeniedError, recover_existing_fixture_run
+from guildmind.runtime.replay import ReplayIntegrityError, replay_events, semantic_digest
 from guildmind.runtime.runner import FixtureRunner
 from guildmind.sandbox import (
     DockerHostPolicy,
@@ -29,7 +33,15 @@ from guildmind.sandbox import (
     run_resource_probe_suite,
     run_sandbox_self_test,
 )
-from guildmind.storage import EventStore
+from guildmind.storage import EventStore, StoreIntegrityError
+
+_INSPECTION_DENIAL_SCHEMA_VERSION = "guildmind.inspection-denial/v1"
+
+
+class _InspectionDeniedError(RuntimeError):
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+        super().__init__(reason)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -426,10 +438,27 @@ def _evaluate(arguments: argparse.Namespace) -> int:
 
 
 def _replay(arguments: argparse.Namespace) -> int:
-    database = arguments.state_dir.resolve() / "runs.db"
-    with EventStore(database) as store:
-        events = store.list_events(arguments.run_id)
-    state = replay_events(events)
+    try:
+        with _verified_inspection_store(arguments.state_dir, arguments.run_id) as store:
+            events = store.list_events(arguments.run_id)
+            state = replay_events(events)
+    except _InspectionDeniedError as error:
+        return _print_inspection_denial("replay", arguments.run_id, error.reason)
+    except KeyError:
+        return _print_inspection_denial("replay", arguments.run_id, "run_not_found")
+    except StoreIntegrityError as error:
+        reason = (
+            "state_changed"
+            if "changed while" in str(error)
+            else "storage_integrity_validation_failed"
+        )
+        return _print_inspection_denial("replay", arguments.run_id, reason)
+    except (OSError, ReplayIntegrityError, ValueError, sqlite3.DatabaseError):
+        return _print_inspection_denial(
+            "replay",
+            arguments.run_id,
+            "storage_integrity_validation_failed",
+        )
     _print_json(
         {
             "artifacts": state.artifacts,
@@ -446,10 +475,26 @@ def _replay(arguments: argparse.Namespace) -> int:
 
 
 def _recover(arguments: argparse.Namespace) -> int:
-    state_directory = arguments.state_dir.resolve()
-    manifest = FixtureRunner(state_directory=state_directory).recover(arguments.run_id)
-    with EventStore(state_directory / "runs.db") as store:
-        events = store.list_events(arguments.run_id)
+    try:
+        result = recover_existing_fixture_run(
+            state_directory=arguments.state_dir,
+            run_id=arguments.run_id,
+        )
+    except RecoveryDeniedError as error:
+        _print_json(
+            {
+                "error": "recovery_denied",
+                "reason": error.reason.value,
+                "run_id": arguments.run_id,
+                "schema_version": "guildmind.recovery-denial/v1",
+                "storage_state": (
+                    None if error.storage_state is None else error.storage_state.value
+                ),
+            }
+        )
+        return 1
+    manifest = result.manifest
+    events = list(result.events)
     state = replay_events(events, require_terminal=True)
     _print_json(
         {
@@ -464,11 +509,28 @@ def _recover(arguments: argparse.Namespace) -> int:
 
 
 def _report(arguments: argparse.Namespace) -> int:
-    database = arguments.state_dir.resolve() / "runs.db"
-    with EventStore(database) as store:
-        manifest = store.load_manifest(arguments.run_id)
-        used, reserved = store.load_budget_state(arguments.run_id)
-        events = store.list_events(arguments.run_id)
+    try:
+        with _verified_inspection_store(arguments.state_dir, arguments.run_id) as store:
+            manifest = store.load_manifest(arguments.run_id)
+            used, reserved = store.load_budget_state(arguments.run_id)
+            events = store.list_events(arguments.run_id)
+    except _InspectionDeniedError as error:
+        return _print_inspection_denial("report", arguments.run_id, error.reason)
+    except KeyError:
+        return _print_inspection_denial("report", arguments.run_id, "run_not_found")
+    except StoreIntegrityError as error:
+        reason = (
+            "state_changed"
+            if "changed while" in str(error)
+            else "storage_integrity_validation_failed"
+        )
+        return _print_inspection_denial("report", arguments.run_id, reason)
+    except (OSError, ReplayIntegrityError, ValueError, sqlite3.DatabaseError):
+        return _print_inspection_denial(
+            "report",
+            arguments.run_id,
+            "storage_integrity_validation_failed",
+        )
     _print_json(
         {
             "budget_reserved": reserved.model_dump(mode="json"),
@@ -479,6 +541,149 @@ def _report(arguments: argparse.Namespace) -> int:
         }
     )
     return 0
+
+
+@contextmanager
+def _verified_inspection_store(
+    configured_state_directory: Path,
+    run_id: str,
+) -> Iterator[EventStore]:
+    lexical_state_directory = Path(os.path.abspath(configured_state_directory))
+    if lexical_state_directory == lexical_state_directory.parent:
+        raise _InspectionDeniedError("filesystem_root_state_forbidden")
+    try:
+        trusted_parent = lexical_state_directory.parent.resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise _InspectionDeniedError("state_directory_missing") from error
+    trusted_parent_identity = _validate_inspection_real_directory(
+        trusted_parent,
+        unavailable_reason="state_directory_unavailable",
+    )
+    state_directory = trusted_parent / lexical_state_directory.name
+    state_identity = _validate_inspection_state_directory(state_directory)
+    database = state_directory / "runs.db"
+    database_identity = _validate_inspection_database_leaf(database)
+    with EventStore.open_existing_read_only(
+        database,
+        trusted_base=trusted_parent,
+    ) as store:
+        _validate_inspection_real_directory(
+            trusted_parent,
+            expected_identity=trusted_parent_identity,
+            unavailable_reason="state_changed",
+        )
+        _validate_inspection_state_directory(state_directory, expected_identity=state_identity)
+        _validate_inspection_database_leaf(database, expected_identity=database_identity)
+        with store.verified_snapshot() as roots:
+            _validate_inspection_real_directory(
+                trusted_parent,
+                expected_identity=trusted_parent_identity,
+                unavailable_reason="state_changed",
+            )
+            _validate_inspection_state_directory(
+                state_directory,
+                expected_identity=state_identity,
+            )
+            _validate_inspection_database_leaf(database, expected_identity=database_identity)
+            if all(root.manifest.run_id != run_id for root in roots):
+                raise KeyError(f"unknown run: {run_id}")
+            try:
+                yield store
+            finally:
+                _validate_inspection_real_directory(
+                    trusted_parent,
+                    expected_identity=trusted_parent_identity,
+                    unavailable_reason="state_changed",
+                )
+                _validate_inspection_state_directory(
+                    state_directory,
+                    expected_identity=state_identity,
+                )
+                _validate_inspection_database_leaf(
+                    database,
+                    expected_identity=database_identity,
+                )
+        _validate_inspection_real_directory(
+            trusted_parent,
+            expected_identity=trusted_parent_identity,
+            unavailable_reason="state_changed",
+        )
+        _validate_inspection_state_directory(state_directory, expected_identity=state_identity)
+        _validate_inspection_database_leaf(database, expected_identity=database_identity)
+
+
+def _validate_inspection_real_directory(
+    directory: Path,
+    *,
+    unavailable_reason: str,
+    expected_identity: tuple[int, int] | None = None,
+) -> tuple[int, int]:
+    try:
+        metadata = directory.lstat()
+    except OSError as error:
+        raise _InspectionDeniedError(unavailable_reason) from error
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+        raise _InspectionDeniedError(unavailable_reason)
+    identity = (metadata.st_dev, metadata.st_ino)
+    if expected_identity is not None and identity != expected_identity:
+        raise _InspectionDeniedError("state_changed")
+    return identity
+
+
+def _validate_inspection_state_directory(
+    state_directory: Path,
+    *,
+    expected_identity: tuple[int, int] | None = None,
+) -> tuple[int, int]:
+    try:
+        metadata = state_directory.lstat()
+    except FileNotFoundError as error:
+        reason = "state_changed" if expected_identity is not None else "state_directory_missing"
+        raise _InspectionDeniedError(reason) from error
+    except OSError as error:
+        raise _InspectionDeniedError("state_directory_unavailable") from error
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+        reason = "state_changed" if expected_identity is not None else "state_directory_not_real"
+        raise _InspectionDeniedError(reason)
+    identity = (metadata.st_dev, metadata.st_ino)
+    if expected_identity is not None and identity != expected_identity:
+        raise _InspectionDeniedError("state_changed")
+    return identity
+
+
+def _validate_inspection_database_leaf(
+    database: Path,
+    *,
+    expected_identity: tuple[int, int] | None = None,
+) -> tuple[int, int]:
+    try:
+        metadata = database.lstat()
+    except FileNotFoundError as error:
+        reason = "state_changed" if expected_identity is not None else "database_missing"
+        raise _InspectionDeniedError(reason) from error
+    except OSError as error:
+        reason = "state_changed" if expected_identity is not None else "database_unavailable"
+        raise _InspectionDeniedError(reason) from error
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+        reason = "state_changed" if expected_identity is not None else "database_not_real_file"
+        raise _InspectionDeniedError(reason)
+    identity = (metadata.st_dev, metadata.st_ino)
+    if expected_identity is not None and identity != expected_identity:
+        raise _InspectionDeniedError("state_changed")
+    return identity
+
+
+def _print_inspection_denial(command: str, run_id: str, reason: str) -> int:
+    _print_json(
+        {
+            "command": command,
+            "error": "inspection_denied",
+            "reason": reason,
+            "run_id": run_id,
+            "schema_version": _INSPECTION_DENIAL_SCHEMA_VERSION,
+        }
+    )
+    return 1
 
 
 def _export_schemas(arguments: argparse.Namespace) -> int:

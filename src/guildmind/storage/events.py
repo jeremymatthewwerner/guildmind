@@ -6,7 +6,7 @@ import json
 import os
 import sqlite3
 import stat
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -216,6 +216,14 @@ class VerifiedRunRoot:
     manifest_sha256: str
     event_count: int
     head_event_sha256: str
+
+
+@dataclass(frozen=True, slots=True)
+class EventStoreTerminalResult:
+    """A terminal manifest and event stream captured inside its write transaction."""
+
+    manifest: RunManifest
+    events: tuple[EventRecord, ...]
 
 
 def verified_run_roots_sha256(roots: Sequence[VerifiedRunRoot]) -> str:
@@ -693,7 +701,32 @@ class EventStore:
         budget_used: BudgetUsage,
         budget_reserved: BudgetUsage,
     ) -> RunManifest:
-        """Atomically bind evaluation evidence, final budget, manifest, and terminal event."""
+        """Compatibility wrapper returning only the terminal manifest."""
+
+        return self.complete_evaluation_with_events(
+            run_id=run_id,
+            artifacts=artifacts,
+            evaluation_payload=evaluation_payload,
+            status=status,
+            finished_at=finished_at,
+            terminal_reason=terminal_reason,
+            budget_used=budget_used,
+            budget_reserved=budget_reserved,
+        ).manifest
+
+    def complete_evaluation_with_events(
+        self,
+        *,
+        run_id: str,
+        artifacts: Mapping[str, ArtifactRef],
+        evaluation_payload: dict[str, JsonValue],
+        status: RunStatus,
+        finished_at: datetime,
+        terminal_reason: str | None,
+        budget_used: BudgetUsage,
+        budget_reserved: BudgetUsage,
+    ) -> EventStoreTerminalResult:
+        """Atomically bind evaluation evidence and capture its terminal event stream."""
 
         if not status.is_terminal:
             raise ValueError("evaluation completion requires a terminal status")
@@ -774,7 +807,10 @@ class EventStore:
             self._save_manifest_locked(run_id, final_manifest)
             self._update_budget_locked(run_id, budget_used, budget_reserved)
             self._validate_terminal_state_locked(run_id, final_manifest)
-            return final_manifest
+            return EventStoreTerminalResult(
+                manifest=final_manifest,
+                events=tuple(self._list_events_locked(run_id)),
+            )
 
     def recover_run(
         self,
@@ -783,31 +819,62 @@ class EventStore:
         finished_at: datetime,
         terminal_reason: str = "interrupted_run_recovered",
         expected_snapshot_sha256: str | None = None,
+        integrity_guard: Callable[[tuple[VerifiedRunRoot, ...]], None] | None = None,
     ) -> RunManifest:
+        """Compatibility wrapper returning only the recovered manifest."""
+
+        return self.recover_run_with_events(
+            run_id,
+            finished_at=finished_at,
+            terminal_reason=terminal_reason,
+            expected_snapshot_sha256=expected_snapshot_sha256,
+            integrity_guard=integrity_guard,
+        ).manifest
+
+    def recover_run_with_events(
+        self,
+        run_id: str,
+        *,
+        finished_at: datetime,
+        terminal_reason: str = "interrupted_run_recovered",
+        expected_snapshot_sha256: str | None = None,
+        integrity_guard: Callable[[tuple[VerifiedRunRoot, ...]], None] | None = None,
+    ) -> EventStoreTerminalResult:
         """Terminalize an interrupted run without redispatching external work.
 
         A started request with no recorded response is classified as ambiguous and its
         full outstanding reservation is charged. Calling this method again on the
         resulting terminal run is a read-only no-op. When an expected snapshot is
         supplied, the complete ledger commitment must still match under the recovery
-        write transaction before any lifecycle state is changed.
+        write transaction before any lifecycle state is changed. ``integrity_guard``
+        receives those exact writer-locked roots and must return successfully before
+        recovery may stage a lifecycle mutation. It is invoked again against the
+        post-mutation roots at the transaction's final pre-commit boundary.
         """
 
         if not terminal_reason.strip():
             raise ValueError("terminal_reason cannot be empty")
         if expected_snapshot_sha256 is not None and not _is_lower_sha256(expected_snapshot_sha256):
             raise ValueError("expected_snapshot_sha256 must be a lowercase SHA-256")
-        with self._transaction():
+        if integrity_guard is not None and expected_snapshot_sha256 is None:
+            raise ValueError("integrity_guard requires expected_snapshot_sha256")
+        with self._transaction(precommit_integrity_guard=integrity_guard):
             self._validate_schema_locked()
-            if expected_snapshot_sha256 is not None:
-                observed_snapshot_sha256 = verified_run_roots_sha256(self._verified_roots_locked())
+            if expected_snapshot_sha256 is not None or integrity_guard is not None:
+                locked_roots = self._verified_roots_locked()
+                observed_snapshot_sha256 = verified_run_roots_sha256(locked_roots)
                 if observed_snapshot_sha256 != expected_snapshot_sha256:
                     raise StoreIntegrityError("verified run root snapshot changed before recovery")
+                if integrity_guard is not None:
+                    integrity_guard(locked_roots)
             current = self._load_manifest_locked(run_id)
             state = self._validated_state_locked(run_id, current)
             if current.status.is_terminal:
                 self._validate_terminal_state_locked(run_id, current)
-                return current
+                return EventStoreTerminalResult(
+                    manifest=current,
+                    events=tuple(self._list_events_locked(run_id)),
+                )
 
             absence_reason = "interrupted"
             for name in sorted(EXPECTED_ARTIFACT_NAMES - set(state.artifacts)):
@@ -866,7 +933,10 @@ class EventStore:
                 raise StoreIntegrityError(
                     "database integrity validation failed after recovery"
                 ) from error
-            return final_manifest
+            return EventStoreTerminalResult(
+                manifest=final_manifest,
+                events=tuple(self._list_events_locked(run_id)),
+            )
 
     def complete_budget_exhaustion(
         self,
@@ -875,16 +945,50 @@ class EventStore:
         finished_at: datetime,
         terminal_reason: str = "model_reservation_refused",
     ) -> RunManifest:
-        """Terminalize a pre-dispatch budget refusal without classifying it as infra."""
+        """Compatibility wrapper returning only the budget-exhausted manifest."""
+
+        return self.complete_budget_exhaustion_with_events(
+            run_id,
+            finished_at=finished_at,
+            terminal_reason=terminal_reason,
+        ).manifest
+
+    def complete_budget_exhaustion_with_events(
+        self,
+        run_id: str,
+        *,
+        finished_at: datetime,
+        terminal_reason: str = "model_reservation_refused",
+        expected_snapshot_sha256: str | None = None,
+        integrity_guard: Callable[[tuple[VerifiedRunRoot, ...]], None] | None = None,
+    ) -> EventStoreTerminalResult:
+        """Terminalize a pre-dispatch refusal and capture its terminal event stream."""
 
         if not terminal_reason.strip():
             raise ValueError("terminal_reason cannot be empty")
-        with self._transaction():
+        if expected_snapshot_sha256 is not None and not _is_lower_sha256(expected_snapshot_sha256):
+            raise ValueError("expected_snapshot_sha256 must be a lowercase SHA-256")
+        if integrity_guard is not None and expected_snapshot_sha256 is None:
+            raise ValueError("integrity_guard requires expected_snapshot_sha256")
+        with self._transaction(precommit_integrity_guard=integrity_guard):
+            self._validate_schema_locked()
+            if expected_snapshot_sha256 is not None or integrity_guard is not None:
+                locked_roots = self._verified_roots_locked()
+                observed_snapshot_sha256 = verified_run_roots_sha256(locked_roots)
+                if observed_snapshot_sha256 != expected_snapshot_sha256:
+                    raise StoreIntegrityError(
+                        "verified run root snapshot changed before budget terminalization"
+                    )
+                if integrity_guard is not None:
+                    integrity_guard(locked_roots)
             current = self._load_manifest_locked(run_id)
             state = self._validated_state_locked(run_id, current)
             if current.status.is_terminal:
                 self._validate_terminal_state_locked(run_id, current)
-                return current
+                return EventStoreTerminalResult(
+                    manifest=current,
+                    events=tuple(self._list_events_locked(run_id)),
+                )
             if state.model_request_state != "not_started":
                 raise StoreIntegrityError("budget refusal terminalization must precede dispatch")
             used, reserved = self._load_budget_locked(run_id)
@@ -921,7 +1025,10 @@ class EventStore:
             self._save_manifest_locked(run_id, final_manifest)
             self._update_budget_locked(run_id, used, reserved)
             self._validate_terminal_state_locked(run_id, final_manifest)
-            return final_manifest
+            return EventStoreTerminalResult(
+                manifest=final_manifest,
+                events=tuple(self._list_events_locked(run_id)),
+            )
 
     def load_manifest(self, run_id: str) -> RunManifest:
         manifest = self._load_manifest_locked(run_id)
@@ -1543,7 +1650,11 @@ class EventStore:
             raise StoreIntegrityError("existing event store schema is invalid") from error
 
     @contextmanager
-    def _transaction(self) -> Iterator[None]:
+    def _transaction(
+        self,
+        *,
+        precommit_integrity_guard: Callable[[tuple[VerifiedRunRoot, ...]], None] | None = None,
+    ) -> Iterator[None]:
         if self._read_only:
             raise StoreIntegrityError("event store is read-only")
         self._validate_tracked_path()
@@ -1558,7 +1669,11 @@ class EventStore:
             self._validate_tracked_path()
             if self._existing_path_identity is not None:
                 self._validate_schema_locked()
-                self._validate_full_ledger_locked()
+                final_roots = self._validate_full_ledger_locked()
+            else:
+                final_roots = self._verified_roots_locked()
+            if precommit_integrity_guard is not None:
+                precommit_integrity_guard(final_roots)
             self._validate_tracked_path()
         except BaseException:
             self._connection.rollback()
@@ -1566,9 +1681,9 @@ class EventStore:
         else:
             self._connection.commit()
 
-    def _validate_full_ledger_locked(self) -> None:
+    def _validate_full_ledger_locked(self) -> tuple[VerifiedRunRoot, ...]:
         try:
-            self._verified_roots_locked()
+            return self._verified_roots_locked()
         except StoreIntegrityError:
             raise
         except (IndexError, KeyError, TypeError, ValueError, sqlite3.DatabaseError) as error:
