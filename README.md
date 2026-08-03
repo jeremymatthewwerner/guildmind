@@ -195,6 +195,9 @@ overwrite an existing report.
 
 ## Project documents
 
+- [Current pause-point handoff](docs/progress/2026-08-03-pause-point.md): a complete
+  summary of what has been built, what runs locally now, the remaining evidence limits,
+  expected future costs, and the exact next checkpoint.
 - [Starting brief](docs/starting-brief.md): the thesis, first experiment, evaluation strategy, risks, and research principles.
 - [Staged build plan](docs/build-plan.md): the architecture, benchmark ladder, statistical design, stage gates, implementation roadmap, costs, and first-month backlog.
 - [Hybrid evolution and reinforcement learning](docs/hybrid-evolution-rl.md): the future Stage 8 constraint/policy boundary, RL contract, inheritance semantics, evidence identity, and matched comparison arms.
