@@ -1,0 +1,12 @@
+diff --git a/wrapping.py b/wrapping.py
+--- a/wrapping.py
++++ b/wrapping.py
+@@ -7,7 +7,7 @@ def wrap_words(words: list[str], width: int) -> list[str]:
+     lines: list[str] = []
+     current = ""
+     for word in words:
+-        candidate = f"{current} {word}".strip()
++        candidate = " ".join((current, word)).strip()
+         if len(candidate) < width:
+             current = candidate
+         else:

@@ -29,6 +29,12 @@ _SECOND_BATCH = (
     ("008-topological-order", "topology.py"),
     ("009-ordered-changes", "changes.py"),
 )
+_THIRD_BATCH = (
+    ("010-word-wrap", "wrapping.py"),
+    ("011-business-days", "business_days.py"),
+    ("012-roman-parser", "roman.py"),
+    ("013-grid-rotation", "grid.py"),
+)
 
 
 def _assert_identical_results(
@@ -117,6 +123,14 @@ def test_first_fixture_batch_has_stable_pristine_and_gold_outcomes(
 
 @pytest.mark.parametrize(("fixture_name", "implementation"), _SECOND_BATCH)
 def test_second_fixture_batch_has_stable_pristine_and_gold_outcomes(
+    fixture_name: str,
+    implementation: str,
+) -> None:
+    _assert_stable_pristine_and_gold_outcomes(fixture_name, implementation)
+
+
+@pytest.mark.parametrize(("fixture_name", "implementation"), _THIRD_BATCH)
+def test_third_fixture_batch_has_stable_pristine_and_gold_outcomes(
     fixture_name: str,
     implementation: str,
 ) -> None:

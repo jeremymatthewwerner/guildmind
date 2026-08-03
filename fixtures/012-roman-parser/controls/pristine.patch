@@ -1,0 +1,6 @@
+diff --git a/roman.py b/roman.py
+--- a/roman.py
++++ b/roman.py
+@@ -8 +8 @@ def parse_roman(text: str) -> int | None:
+-    return sum(values[symbol] for symbol in text)
++    return sum(map(values.__getitem__, text))

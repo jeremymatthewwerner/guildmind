@@ -1,0 +1,19 @@
+diff --git a/business_days.py b/business_days.py
+--- a/business_days.py
++++ b/business_days.py
+@@ -4,13 +4,13 @@ from datetime import date, timedelta
+ 
+ 
+ def business_days(start: str, end: str, holidays: list[str]) -> int:
+-    """Count non-holiday weekdays from ``start`` through ``end`` inclusively."""
++    """Count non-holiday weekdays in the half-open interval ``[start, end)``."""
+ 
+     cursor = date.fromisoformat(start)
+     finish = date.fromisoformat(end)
+     blocked = {date.fromisoformat(item) for item in holidays}
+     count = 0
+-    while cursor <= finish:
++    while cursor < finish:
+         if cursor.weekday() < 5 and cursor not in blocked:
+             count += 1
+         cursor += timedelta(days=1)

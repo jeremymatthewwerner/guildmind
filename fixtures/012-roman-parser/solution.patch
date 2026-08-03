@@ -1,0 +1,32 @@
+diff --git a/roman.py b/roman.py
+--- a/roman.py
++++ b/roman.py
+@@ -1,8 +1,26 @@
+ """Roman-numeral parsing."""
+ 
++import re
++
++_CANONICAL = re.compile(
++    r"M{0,3}(?:CM|CD|D?C{0,3})"
++    r"(?:XC|XL|L?X{0,3})"
++    r"(?:IX|IV|V?I{0,3})"
++)
++
+ 
+ def parse_roman(text: str) -> int | None:
+-    """Return the value obtained by adding every recognized Roman symbol."""
++    """Return a canonical Roman numeral's value, or ``None`` when invalid."""
+ 
+     values = {"I": 1, "V": 5, "X": 10, "L": 50, "C": 100, "D": 500, "M": 1000}
+-    return sum(values[symbol] for symbol in text)
++    if not text or _CANONICAL.fullmatch(text) is None:
++        return None
++
++    total = 0
++    for index, symbol in enumerate(text):
++        value = values[symbol]
++        if index + 1 < len(text) and value < values[text[index + 1]]:
++            total -= value
++        else:
++            total += value
++    return total

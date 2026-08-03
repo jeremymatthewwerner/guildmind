@@ -1,0 +1,12 @@
+diff --git a/business_days.py b/business_days.py
+--- a/business_days.py
++++ b/business_days.py
+@@ -8,7 +8,7 @@ def business_days(start: str, end: str, holidays: list[str]) -> int:
+ 
+     cursor = date.fromisoformat(start)
+     finish = date.fromisoformat(end)
+-    blocked = {date.fromisoformat(item) for item in holidays}
++    blocked = set(date.fromisoformat(item) for item in holidays)
+     count = 0
+     while cursor <= finish:
+         if cursor.weekday() < 5 and cursor not in blocked:

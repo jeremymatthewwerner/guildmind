@@ -1,0 +1,23 @@
+diff --git a/grid.py b/grid.py
+--- a/grid.py
++++ b/grid.py
+@@ -3,8 +3,16 @@ from typing import Any
+ from typing import Any
+ 
+ 
+ def rotate_grid(grid: list[list[Any]]) -> list[list[Any]]:
+-    """Rotate a square grid 90 degrees clockwise."""
++    """Rotate a rectangular grid 90 degrees clockwise."""
+ 
+-    size = len(grid)
++    height = len(grid)
++    if height == 0:
++        return []
++    width = len(grid[0])
++    if any(len(row) != width for row in grid):
++        raise ValueError("grid must be rectangular")
+-    return [[grid[size - 1 - row][column] for row in range(size)] for column in range(size)]
++    return [
++        [grid[row][column] for row in range(height - 1, -1, -1)]
++        for column in range(width)
++    ]
