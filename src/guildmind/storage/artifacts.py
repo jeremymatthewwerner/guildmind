@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import ctypes
+import errno
 import hashlib
 import os
 import stat
+import sys
 import tempfile
-from contextlib import suppress
 from pathlib import Path
 from typing import Self
 
@@ -17,10 +19,93 @@ class ArtifactCorruptionError(RuntimeError):
     """Raised when bytes do not match their content-addressed identity."""
 
 
+_AT_FDCWD = -100
+_RENAME_NOREPLACE = 1
+_RENAME_EXCL = 0x00000004
+_SCANDIR = os.scandir
+
+
+def _invoke_noreplace_rename(source: Path, target: Path) -> None:
+    """Atomically rename ``source`` to absent ``target`` using the host libc.
+
+    There is intentionally no portable fallback. In particular, publishing with a
+    hard link would expose a window in which the temporary and canonical names both
+    point at the blob, violating the store's single-link ownership invariant.
+    """
+
+    try:
+        libc = ctypes.CDLL(None, use_errno=True)
+    except OSError as error:
+        raise OSError(errno.ENOSYS, "host libc is unavailable") from error
+
+    source_bytes = os.fsencode(source)
+    target_bytes = os.fsencode(target)
+    if sys.platform == "darwin":
+        try:
+            rename = libc.renamex_np
+        except AttributeError as error:
+            raise OSError(errno.ENOSYS, "libc renamex_np is unavailable") from error
+        rename.argtypes = (ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint)
+        rename.restype = ctypes.c_int
+        arguments = (source_bytes, target_bytes, _RENAME_EXCL)
+    elif sys.platform.startswith("linux"):
+        try:
+            rename = libc.renameat2
+        except AttributeError as error:
+            raise OSError(errno.ENOSYS, "libc renameat2 is unavailable") from error
+        rename.argtypes = (
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        )
+        rename.restype = ctypes.c_int
+        arguments = (
+            _AT_FDCWD,
+            source_bytes,
+            _AT_FDCWD,
+            target_bytes,
+            _RENAME_NOREPLACE,
+        )
+    else:
+        raise OSError(
+            errno.ENOTSUP,
+            f"atomic no-replace rename is unsupported on {sys.platform}",
+        )
+
+    ctypes.set_errno(0)
+    result = rename(*arguments)
+    if result != 0:
+        error_number = ctypes.get_errno() or errno.EIO
+        raise OSError(error_number, os.strerror(error_number), str(target))
+
+
+def _rename_noreplace(source: Path, target: Path) -> bool:
+    """Publish ``source`` at ``target`` and report whether this publisher won."""
+
+    try:
+        _invoke_noreplace_rename(source, target)
+    except OSError as error:
+        if error.errno == errno.EEXIST:
+            return False
+        raise ArtifactCorruptionError(
+            f"artifact {target.name} could not be published with atomic no-replace rename"
+        ) from error
+    return True
+
+
+def _entry_name_exists_exact(directory: Path, name: str) -> bool:
+    """Return whether ``directory`` contains exactly ``name`` as reported on disk."""
+
+    with _SCANDIR(directory) as entries:
+        return any(entry.name == name for entry in entries)
+
+
 class FileArtifactStore:
     """Store immutable blobs below ``sha256/<prefix>/<digest>``.
 
-    A blob is flushed, verified, and atomically linked into its canonical path before
+    A blob is flushed, verified, and atomically renamed into its canonical path before
     its reference is returned. The caller can therefore commit the reference to SQLite
     only after the bytes exist, without any publisher replacing an existing blob.
 
@@ -43,9 +128,14 @@ class FileArtifactStore:
             raise ValueError("artifact store root must be below its trusted base") from error
         if not relative_root.parts:
             raise ValueError("artifact store root must be below its trusted base")
-        self.root = configured_base.resolve(strict=False).joinpath(relative_root)
+        resolved_base = configured_base.resolve(strict=False)
+        self.root = resolved_base.joinpath(relative_root)
         self._read_only = False
-        self._create_directory_chain(self.root)
+        self._controlled_directories = self._paths_below(resolved_base, relative_root)
+        self._create_directory_chain(
+            self.root,
+            controlled_directories=self._controlled_directories,
+        )
         self._directory_identities = self._snapshot_directory_chain(self.root)
 
     @classmethod
@@ -85,6 +175,7 @@ class FileArtifactStore:
         instance = cls.__new__(cls)
         instance.root = resolved_base.joinpath(relative_root)
         instance._read_only = True
+        instance._controlled_directories = instance._paths_below(resolved_base, relative_root)
         instance._directory_identities = instance._snapshot_directory_chain(instance.root)
         instance._validate_directory_chain()
         return instance
@@ -142,10 +233,8 @@ class FileArtifactStore:
         for component in ("sha256", digest[:2]):
             candidate = current / component
             if create:
-                created = False
                 try:
                     os.mkdir(candidate)
-                    created = True
                 except FileExistsError:
                     pass
                 except OSError as error:
@@ -153,15 +242,31 @@ class FileArtifactStore:
                         f"artifact directory {candidate} could not be created safely"
                     ) from error
                 self._require_real_directory(candidate)
-                if created:
-                    self._fsync_directory(current)
+                # An existing entry may be the residue of a process that died after
+                # mkdir but before syncing its parent. Repair that durability gap
+                # before any temporary or canonical artifact is published below it.
+                self._fsync_directory(current)
             elif not self._require_real_directory(candidate, missing_ok=True):
                 return expected
             current = candidate
         return expected
 
     @staticmethod
-    def _create_directory_chain(path: Path) -> None:
+    def _paths_below(base: Path, relative: Path) -> tuple[Path, ...]:
+        current = base
+        paths: list[Path] = []
+        for component in relative.parts:
+            current /= component
+            paths.append(current)
+        return tuple(paths)
+
+    @staticmethod
+    def _create_directory_chain(
+        path: Path,
+        *,
+        controlled_directories: tuple[Path, ...],
+    ) -> None:
+        controlled = set(controlled_directories)
         current = Path(path.anchor)
         for component in path.parts[1:]:
             candidate = current / component
@@ -185,7 +290,14 @@ class FileArtifactStore:
                 raise ArtifactCorruptionError(
                     f"artifact directory {candidate} is not a real directory"
                 )
-            if created:
+            if candidate in controlled:
+                FileArtifactStore._require_exact_entry_name(candidate)
+                # Sync even an inherited directory entry: its creator may have died
+                # immediately after mkdir and before the parent fsync.
+                FileArtifactStore._fsync_directory(current)
+            elif created:
+                # Preserve the existing creation behavior above the explicitly trusted
+                # boundary without adding fsyncs for every preexisting host ancestor.
                 FileArtifactStore._fsync_directory(current)
             current = candidate
 
@@ -223,6 +335,38 @@ class FileArtifactStore:
                 raise ArtifactCorruptionError(
                     f"artifact directory {path} changed after store initialization"
                 )
+        for path in self._controlled_directories:
+            self._require_exact_entry_name(path)
+
+    @staticmethod
+    def _require_exact_entry_name(path: Path, *, missing_ok: bool = False) -> bool:
+        try:
+            exact = _entry_name_exists_exact(path.parent, path.name)
+        except FileNotFoundError as error:
+            if missing_ok:
+                return False
+            raise ArtifactCorruptionError(f"missing artifact path {path}") from error
+        except OSError as error:
+            raise ArtifactCorruptionError(
+                f"artifact path {path} could not be inspected for its exact name"
+            ) from error
+        if exact:
+            return True
+
+        # On a case-sensitive filesystem this usually means the path is absent. On a
+        # case-insensitive filesystem lstat may still resolve an entry with different
+        # spelling; that alias must be rejected rather than blessed as canonical.
+        try:
+            os.lstat(path)
+        except FileNotFoundError as error:
+            if missing_ok:
+                return False
+            raise ArtifactCorruptionError(f"missing artifact path {path}") from error
+        except OSError as error:
+            raise ArtifactCorruptionError(
+                f"artifact path {path} could not be inspected for its exact name"
+            ) from error
+        raise ArtifactCorruptionError(f"artifact path {path} does not have its exact on-disk name")
 
     @staticmethod
     def _require_real_directory(path: Path, *, missing_ok: bool = False) -> bool:
@@ -238,6 +382,7 @@ class FileArtifactStore:
             ) from error
         if not stat.S_ISDIR(path_metadata.st_mode):
             raise ArtifactCorruptionError(f"artifact directory {path} is not a real directory")
+        FileArtifactStore._require_exact_entry_name(path)
         return True
 
     def _verify_path(self, path: Path, *, digest: str, size_bytes: int) -> None:
@@ -255,6 +400,7 @@ class FileArtifactStore:
         except OSError as error:
             raise ArtifactCorruptionError(f"artifact {digest} could not be inspected") from error
 
+        self._require_exact_entry_name(path)
         if not stat.S_ISREG(path_metadata.st_mode):
             raise ArtifactCorruptionError(f"artifact {digest} is not a regular file")
         if path_metadata.st_nlink != 1:
@@ -296,6 +442,7 @@ class FileArtifactStore:
                 final_path_metadata = os.lstat(path)
             except FileNotFoundError as error:
                 raise ArtifactCorruptionError(f"missing artifact {digest}") from error
+            self._require_exact_entry_name(path)
 
             opened_snapshot = (
                 opened_metadata.st_dev,
@@ -343,6 +490,7 @@ class FileArtifactStore:
         digest = sha256_bytes(data)
         descriptor, temporary_name = tempfile.mkstemp(prefix=".artifact-", dir=target.parent)
         temporary = Path(temporary_name)
+        preserve_temporary = False
         try:
             with os.fdopen(descriptor, "wb") as stream:
                 stream.write(data)
@@ -352,10 +500,19 @@ class FileArtifactStore:
             self._verify_path(temporary, digest=digest, size_bytes=len(data))
             # Another publisher may win, or a canonical entry may already exist. Never
             # replace it; final verification decides whether it is a valid dedupe.
-            with suppress(FileExistsError):
-                os.link(temporary, target, follow_symlinks=False)
+            published = _rename_noreplace(temporary, target)
+            if not published:
+                try:
+                    self._verify_path(target, digest=digest, size_bytes=len(data))
+                except ArtifactCorruptionError:
+                    # Keep the already-fsynced, verified contender as recoverable
+                    # evidence when the canonical target is invalid. The final parent
+                    # fsync makes that temporary directory entry durable before denial.
+                    preserve_temporary = True
+                    raise
         finally:
-            temporary.unlink(missing_ok=True)
+            if not preserve_temporary:
+                temporary.unlink(missing_ok=True)
             self._fsync_directory(target.parent)
 
         self._verify_path(target, digest=digest, size_bytes=len(data))
