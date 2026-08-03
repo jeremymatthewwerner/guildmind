@@ -17,10 +17,13 @@ such a claim requires a separately preregistered confidence rule and more observ
 Fixture 001 and the one-attempt campaign are accepted development harness evidence.
 Fixtures 002–005 now have committed fixture directories and have passed both the
 three-repeat trusted-local gate and the three-repeat two-phase development-container gate
-for their exact pristine controls and gold patches. They remain development fixtures
-until batch-calibration campaign evidence and rootless x86_64 reference-host repetition
-are committed. Rows 006–020 remain a construction plan. Neither development-qualified
-nor planned rows may be counted in the final Stage 1 reliability denominator.
+for their exact pristine controls and gold patches. A separately frozen five-fixture
+batch-calibration campaign also reconciled every attempt as expected with zero
+infrastructure errors. Fixtures 001–005 are therefore development-qualified; they still
+require inclusion in the final frozen schedule and native rootless x86_64 reference-host
+repetition. Rows 006–020 remain a construction plan. Planned rows may not be counted in
+any campaign denominator, and this five-attempt calibration may not be relabeled as the
+final Stage 1 denominator.
 
 ## Anti-duplication and acceptance rules
 
@@ -49,11 +52,11 @@ A fixture is eligible only if all of the following hold:
 
 | ID | Callable | Primary semantic / bug class | Principal JSON shape | Key sealed discriminator | Status |
 |---|---|---|---|---|---|
-| 001 | `add(left, right)` | Signed scalar arithmetic; wrong operator | integer scalars | mixed signs and unbounded integer carry | Accepted; one-fixture smoke |
-| 002 | `slugify(text)` | Unicode-aware normalization and separator collapse | string | punctuation runs, outer separators, Unicode letters | Local + development container passed; campaign/reference pending |
-| 003 | `merge_intervals(intervals)` | Ordering plus closed-integer interval coalescing | nested integer lists | unsorted containment, adjacency, negatives, empty input | Local + development container passed; campaign/reference pending |
-| 004 | `resolve_pointer(document, pointer)` | Escaped-token traversal across maps and arrays | arbitrary nested JSON | RFC 6901 `~0`/`~1`, root pointer, empty key, list index | Local + development container passed; campaign/reference pending |
-| 005 | `dedupe_by(records, key)` | Stable first-wins deduplication by structural JSON identity | list of objects | falsy, list-valued, and object-valued keys while preserving order | Local + development container passed; campaign/reference pending |
+| 001 | `add(left, right)` | Signed scalar arithmetic; wrong operator | integer scalars | mixed signs and unbounded integer carry | Development-qualified; reference pending |
+| 002 | `slugify(text)` | Unicode-aware normalization and separator collapse | string | punctuation runs, outer separators, Unicode letters | Development-qualified; reference pending |
+| 003 | `merge_intervals(intervals)` | Ordering plus closed-integer interval coalescing | nested integer lists | unsorted containment, adjacency, negatives, empty input | Development-qualified; reference pending |
+| 004 | `resolve_pointer(document, pointer)` | Escaped-token traversal across maps and arrays | arbitrary nested JSON | RFC 6901 `~0`/`~1`, root pointer, empty key, list index | Development-qualified; reference pending |
+| 005 | `dedupe_by(records, key)` | Stable first-wins deduplication by structural JSON identity | list of objects | falsy, list-valued, and object-valued keys while preserving order | Development-qualified; reference pending |
 | 006 | `decode_runs(encoded)` | Stateful run-length parser with multi-digit counts | string → list | multi-digit runs, literal separators, zero/invalid run policy | Planned |
 | 007 | `apportion(total, weights)` | Largest-remainder integer allocation and deterministic ties | integer + numeric list | exact total, zero weights, lexical/index tie break | Planned |
 | 008 | `topological_order(nodes, edges)` | Graph dependency resolution with stable ready-queue order | strings + edge pairs | disconnected graph, diamond, lexical tie, cycle result | Planned |
@@ -112,6 +115,21 @@ recomputes every stable result and binding from 48 fresh disposable containers.
 The host was rootful Docker Desktop on Apple Silicon, running the linux/amd64 evaluator
 under emulation. This is useful development qualification and explicitly not the required
 native rootless x86_64 reference-host result.
+
+## First-batch local campaign calibration
+
+The immutable
+[`stage1-local-batch-001-v1`](../campaigns/stage1-local-batch-001-v1.json) manifest adds
+fixtures 001–005 to one explicit round with seeds 1001–1005, one model call per attempt,
+zero retries, and exact code/fixture/patch/evaluator/model/budget identities. It was
+committed before execution and run from a detached clean worktree.
+
+All 5/5 declared attempts were terminal, reconciled, expected, replay-valid, and
+storage-clean; the aggregate report contained 70 events and zero infrastructure errors.
+The [canonical calibration evidence](evidence/reliability-campaigns/2026-08-03-batch-001-local-calibration/README.md)
+is independently hash-bound and reloaded by the repository test suite. This proves the
+local campaign harness across five semantic families. Five observations are not the
+100-attempt Stage 1 denominator and do not establish a population reliability rate.
 
 ## Batch protocol
 

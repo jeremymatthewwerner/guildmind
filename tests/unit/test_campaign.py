@@ -13,6 +13,7 @@ from guildmind.runtime.campaign import (
     campaign_code_source_sha256,
     campaign_fixture_tree_sha256,
     load_reliability_campaign,
+    load_reliability_campaign_report,
 )
 
 _REPOSITORY_ROOT = Path(__file__).parents[2]
@@ -317,3 +318,41 @@ def test_checked_in_campaign_manifest_matches_current_source_and_fixtures(
         assert fixture.fixture_tree_sha256 == campaign_fixture_tree_sha256(
             _REPOSITORY_ROOT / fixture.fixture_path
         )
+
+
+@pytest.mark.parametrize(
+    ("manifest_name", "report_relative", "attempt_count"),
+    [
+        (
+            "stage1-local-smoke-v1.json",
+            "2026-08-03-one-fixture-smoke/report.json",
+            1,
+        ),
+        (
+            "stage1-local-batch-001-v1.json",
+            "2026-08-03-batch-001-local-calibration/report.json",
+            5,
+        ),
+    ],
+)
+def test_checked_in_campaign_report_matches_its_source_manifest(
+    manifest_name: str,
+    report_relative: str,
+    attempt_count: int,
+) -> None:
+    manifest_path = _REPOSITORY_ROOT / "campaigns" / manifest_name
+    campaign = load_reliability_campaign(
+        manifest_path,
+        repository_root=_REPOSITORY_ROOT,
+    )
+    report = load_reliability_campaign_report(
+        _REPOSITORY_ROOT / "docs" / "evidence" / "reliability-campaigns" / report_relative
+    )
+
+    assert report.body.manifest == campaign.manifest
+    assert report.body.source_manifest_sha256 == sha256_bytes(manifest_path.read_bytes())
+    assert report.body.campaign_manifest_sha256 == campaign.manifest.content_sha256
+    assert report.body.intended_attempt_count == attempt_count
+    assert report.body.expected_attempt_count == attempt_count
+    assert report.body.infrastructure_error_count == 0
+    assert report.body.campaign_passed is True

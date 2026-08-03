@@ -564,6 +564,11 @@ Run one deterministic task through a complete isolated lifecycle and reproduce t
   schedules, hidden retries, missing/nonterminal/undeclared/corrupt attempt evidence,
   derived-claim tampering, and existing report paths. Treat this smoke only as harness
   evidence.
+- Add fixture breadth in separately frozen development batches before the final
+  denominator. Batch 001 now qualifies fixtures 002–005 through three-repeat local and
+  development-container pristine/gold matrices, then calibrates fixtures 001–005 through
+  one content-bound, zero-retry local campaign with 5/5 expected terminal results. Treat
+  those five observations as breadth/calibration evidence only.
 - Freeze the real normal-fixture campaign separately after all 20 distinct fixtures are
   accepted. Use five explicit round-major attempts per fixture, fixed attempt IDs and
   seeds, no hidden retry, and one report whose infrastructure-error numerator and

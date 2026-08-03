@@ -138,6 +138,15 @@ records the rootful ARM development-host boundary. A batch campaign and native r
 x86_64 reference repetition are still pending, so this is not yet part of the final
 Stage 1 reliability claim.
 
+A separately frozen
+[`stage1-local-batch-001-v1`](campaigns/stage1-local-batch-001-v1.json) manifest then ran
+fixtures 001–005 through the transactional local campaign harness. All 5/5 attempts were
+terminal, expected, replay-valid, and storage-clean, with 70 total events, zero retries,
+zero infrastructure errors, and zero provider cost. The
+[canonical batch-calibration report](docs/evidence/reliability-campaigns/2026-08-03-batch-001-local-calibration/README.md)
+is useful breadth evidence, but five attempts are not the final 100-attempt denominator
+and do not prove a 99% population reliability claim.
+
 The current Stage 1 hardening checkpoint adds a restricted Docker invocation contract, a pinned image-owned two-phase evaluator, crash recovery that closes an abandoned nonterminal run with explicit terminal evidence, and a read-only ledger/CAS integrity audit. Eleven real-process tests use pipe-synchronized boundaries and `SIGKILL` to cover five post-commit EventStore prefixes, four selected pre-commit rollback points, and the model-in-flight and evaluator-in-flight FixtureRunner boundaries. CAS publication now uses atomic platform-native no-replace rename; six synchronized Darwin kills cover the root, `sha256`, and shard `mkdir`-before-parent-`fsync` boundaries plus immediately before rename, immediately after rename, and after rename before directory `fsync`. Three further kills cover temporary creation, a flushed proper-prefix write, and the full write immediately before file `fsync`; exact stranded temporaries remain auditable across two idempotent retries. Explicit recovery acquires a cooperative shared maintenance lease before its fresh existing-only audit, checks the complete ledger and recursively reachable CAS bytes under the SQLite writer lock before staging, checks them again at the final pre-commit boundary, and returns the terminal event stream captured inside that transaction. Fixture publication holds the same shared lease through its final SQLite binding, while exclusive mode is reserved for state-wide maintenance and a present `quarantine/v1/ACTIVE` fence blocks mutation. Shared recovery is not quiescent against another shared publisher; it is safe for its narrower terminalization action because it never acts on ownerless findings and revalidates the complete ledger/reachable-CAS graph under the writer lock. Explicit quarantine instead holds exclusive mode, obtains its own fresh top-level audit, accepts only the complete allowlisted set of ownerless valid-finalized, corrupt-finalized, or temporary regular files, and revalidates each pending source before a descriptor-relative no-replace move. A canonical BEFORE/PLAN/ACTIVE chain precedes moves; deterministic receipts and AFTER/COMPLETE evidence precede fence removal. Restart can repair the ambiguous post-rename/pre-receipt window but fails closed if both or neither planned name exists. FixtureRunner exceptions after run creation use the guarded recovery path; pre-dispatch budget refusal uses the same dual guard, while a later budget error receives conservative general recovery. Successful evaluation completion also returns its terminal manifest/events from inside its write transaction, and SQLite writer failures become stable recovery denials. `replay` and `report` open existing state read-only and create nothing when it is absent. A missing, non-directory, or symlinked state leaf remains no-create. Any existing real state directory with a usable lock path—including empty or damaged storage, an unknown run, or an ACTIVE fence—may gain and synchronize the persistent coordination lock before later classification or denial. Six cooperating-process concurrency cases now cover publishers, an exclusive maintainer, a durable ACTIVE fence, overlapping resumers, and the post-unfence/pre-release lease window. Sixteen additional pipe-synchronized `SIGKILL` cases cover the quarantine record, move, receipt, completion, fence-removal, and lease-release prefixes, followed by fresh-process completion and a second identity-preserving no-op. A deterministic same-digest matrix additionally gates eight persistent spawned publishers before and after the real no-replace syscall across 20 unique digest/shard rounds: all 160 low-level puts converge on one winner per round, seven identity-exact losers before cleanup, eight identical references afterward, no residual temporary, and an exact 20-finding final audit. These remain bounded development controls: hostile same-UID concurrency, power-loss durability, reference-host repetition, and general hostile-code containment have not passed.
 
 The implemented path is:
@@ -197,6 +206,12 @@ uv run guildmind campaign run campaigns/stage1-local-smoke-v1.json \
   --repository-root . \
   --state-dir runs/reliability-campaigns/stage1-local-smoke-v1-state \
   --output runs/reliability-campaigns/stage1-local-smoke-v1-report.json
+
+# Or run the frozen five-fixture calibration with different new paths:
+uv run guildmind campaign run campaigns/stage1-local-batch-001-v1.json \
+  --repository-root . \
+  --state-dir runs/reliability-campaigns/stage1-local-batch-001-rerun-state \
+  --output runs/reliability-campaigns/stage1-local-batch-001-rerun-report.json
 ```
 
 The command refuses an existing state or output path and uses no paid model provider.
@@ -240,8 +255,9 @@ overwrite an existing report.
 - [Experiment 0001 contract](docs/experiments/0001-institutional-search.md): the pilot protocol, claims, task partitions, budget semantics, lockbox rules, and open owner decisions.
 - [Threat model](docs/threat-model.md): assets, trust boundaries, threats, controls, and release gates.
 - [Adversarial evaluator corpus](docs/adversarial-corpus.md): manifest invariants, exact attack outcomes, evidence levels, and the resource-classification boundary.
-- [Normal-fixture reliability corpus](docs/fixture-reliability-corpus.md): the frozen 20-family matrix, anti-duplication rules, first locally qualified breadth batch, evidence boundary, and batch protocol.
+- [Normal-fixture reliability corpus](docs/fixture-reliability-corpus.md): the frozen 20-family matrix, anti-duplication rules, first development-qualified breadth batch, evidence boundary, and batch protocol.
 - [Fixture Batch 001 development-container evidence](docs/evidence/fixture-qualification/2026-08-03-batch-001-development-container/README.md): three repeated pristine failures and gold passes for each of four fixtures, with a self-bound report and explicit non-reference host boundary.
+- [Fixture Batch 001 local campaign calibration](docs/evidence/reliability-campaigns/2026-08-03-batch-001-local-calibration/README.md): five content-bound, zero-retry attempts with complete terminal ledger/CAS evidence and an explicit non-statistical boundary.
 - [Unsafe-patch intake evidence](docs/evidence/patch-intake/2026-08-02-development/README.md): the nine-case pre-application matrix, parser hardening, hashes, and evidence limits.
 - [Resource-probe evidence](docs/evidence/resource-probes/2026-08-02-docker-desktop/README.md): three canonical development reports for OOM, PID, writable-byte, and cleanup enforcement.
 - [Containment-probe evidence](docs/evidence/containment-probes/2026-08-02-docker-desktop/README.md): three canonical evaluator candidate/scorer reports for planted-secret, mount/environment, credential, network/socket, privilege, and cleanup boundaries.
