@@ -155,7 +155,17 @@ pristine failures and 12 stable gold passes through the digest-pinned two-phase
 development image—24 evaluations and 48 cleaned containers with no infrastructure
 errors. The [Batch 002 container evidence](docs/evidence/fixture-qualification/2026-08-03-batch-002-development-container/README.md)
 is bound to the tested source revision and preserves the rootful ARM development-host
-limitation. A separately frozen cumulative fixtures 001–009 campaign is the next gate.
+limitation.
+
+The separately committed
+[`stage1-local-batch-002-v1`](campaigns/stage1-local-batch-002-v1.json) manifest then ran
+fixtures 001–009 through the transactional local campaign harness from its exact clean
+revision. All 9/9 attempts were terminal, expected, replay-valid, and storage-clean, with
+126 total events, zero retries, zero infrastructure errors, and zero provider cost. A
+fresh reconciliation reproduced the
+[canonical Batch 002 calibration report](docs/evidence/reliability-campaigns/2026-08-03-batch-002-local-calibration/README.md)
+exactly. Nine observations remain calibration evidence, not the final 100-attempt
+denominator or proof of a 99% population reliability claim.
 
 The current Stage 1 hardening checkpoint adds a restricted Docker invocation contract, a pinned image-owned two-phase evaluator, crash recovery that closes an abandoned nonterminal run with explicit terminal evidence, and a read-only ledger/CAS integrity audit. Eleven real-process tests use pipe-synchronized boundaries and `SIGKILL` to cover five post-commit EventStore prefixes, four selected pre-commit rollback points, and the model-in-flight and evaluator-in-flight FixtureRunner boundaries. CAS publication now uses atomic platform-native no-replace rename; six synchronized Darwin kills cover the root, `sha256`, and shard `mkdir`-before-parent-`fsync` boundaries plus immediately before rename, immediately after rename, and after rename before directory `fsync`. Three further kills cover temporary creation, a flushed proper-prefix write, and the full write immediately before file `fsync`; exact stranded temporaries remain auditable across two idempotent retries. Explicit recovery acquires a cooperative shared maintenance lease before its fresh existing-only audit, checks the complete ledger and recursively reachable CAS bytes under the SQLite writer lock before staging, checks them again at the final pre-commit boundary, and returns the terminal event stream captured inside that transaction. Fixture publication holds the same shared lease through its final SQLite binding, while exclusive mode is reserved for state-wide maintenance and a present `quarantine/v1/ACTIVE` fence blocks mutation. Shared recovery is not quiescent against another shared publisher; it is safe for its narrower terminalization action because it never acts on ownerless findings and revalidates the complete ledger/reachable-CAS graph under the writer lock. Explicit quarantine instead holds exclusive mode, obtains its own fresh top-level audit, accepts only the complete allowlisted set of ownerless valid-finalized, corrupt-finalized, or temporary regular files, and revalidates each pending source before a descriptor-relative no-replace move. A canonical BEFORE/PLAN/ACTIVE chain precedes moves; deterministic receipts and AFTER/COMPLETE evidence precede fence removal. Restart can repair the ambiguous post-rename/pre-receipt window but fails closed if both or neither planned name exists. FixtureRunner exceptions after run creation use the guarded recovery path; pre-dispatch budget refusal uses the same dual guard, while a later budget error receives conservative general recovery. Successful evaluation completion also returns its terminal manifest/events from inside its write transaction, and SQLite writer failures become stable recovery denials. `replay` and `report` open existing state read-only and create nothing when it is absent. A missing, non-directory, or symlinked state leaf remains no-create. Any existing real state directory with a usable lock path—including empty or damaged storage, an unknown run, or an ACTIVE fence—may gain and synchronize the persistent coordination lock before later classification or denial. Six cooperating-process concurrency cases now cover publishers, an exclusive maintainer, a durable ACTIVE fence, overlapping resumers, and the post-unfence/pre-release lease window. Sixteen additional pipe-synchronized `SIGKILL` cases cover the quarantine record, move, receipt, completion, fence-removal, and lease-release prefixes, followed by fresh-process completion and a second identity-preserving no-op. A deterministic same-digest matrix additionally gates eight persistent spawned publishers before and after the real no-replace syscall across 20 unique digest/shard rounds: all 160 low-level puts converge on one winner per round, seven identity-exact losers before cleanup, eight identical references afterward, no residual temporary, and an exact 20-finding final audit. These remain bounded development controls: hostile same-UID concurrency, power-loss durability, reference-host repetition, and general hostile-code containment have not passed.
 
@@ -208,12 +218,11 @@ uv run guildmind recover interrupted-run --state-dir .guildmind
 uv run guildmind quarantine --state-dir .guildmind
 ```
 
-The one- and five-fixture campaign manifests are immutable historical evidence. Their
-bound source revision deliberately differs from the evolving current checkout, so
-`campaign run` now rejects them rather than silently relabeling new code as an old
-campaign. Use the exact implementation checkpoint recorded in each linked evidence
-README for reproduction. The next runnable current-source contract will be a separately
-frozen cumulative Batch 002 manifest; existing manifests will not be edited.
+The one-, five-, and nine-fixture campaign manifests are immutable evidence contracts.
+Each requires its exact bound code and fixture identities; an evolving checkout is
+rejected rather than silently relabeled as an old campaign. Use the tested implementation
+checkpoint recorded in each linked evidence README and new state/report paths for
+reproduction. Existing manifests are never edited to absorb later fixtures.
 
 Campaign execution refuses an existing state or output path and uses no paid model
 provider. Exit 0 means the complete frozen harness verdict passed; exit 2 means a valid
@@ -261,6 +270,7 @@ overwrite an existing report.
 - [Fixture Batch 001 development-container evidence](docs/evidence/fixture-qualification/2026-08-03-batch-001-development-container/README.md): three repeated pristine failures and gold passes for each of four fixtures, with a self-bound report and explicit non-reference host boundary.
 - [Fixture Batch 001 local campaign calibration](docs/evidence/reliability-campaigns/2026-08-03-batch-001-local-calibration/README.md): five content-bound, zero-retry attempts with complete terminal ledger/CAS evidence and an explicit non-statistical boundary.
 - [Fixture Batch 002 development-container evidence](docs/evidence/fixture-qualification/2026-08-03-batch-002-development-container/README.md): three repeated pristine failures and gold passes for fixtures 006–009, exact source/result bindings, and the explicit non-reference host boundary.
+- [Fixture Batch 002 local campaign calibration](docs/evidence/reliability-campaigns/2026-08-03-batch-002-local-calibration/README.md): nine content-bound, zero-retry attempts with complete terminal ledger/CAS evidence, exact reconciliation, and an explicit non-statistical boundary.
 - [Unsafe-patch intake evidence](docs/evidence/patch-intake/2026-08-02-development/README.md): the nine-case pre-application matrix, parser hardening, hashes, and evidence limits.
 - [Resource-probe evidence](docs/evidence/resource-probes/2026-08-02-docker-desktop/README.md): three canonical development reports for OOM, PID, writable-byte, and cleanup enforcement.
 - [Containment-probe evidence](docs/evidence/containment-probes/2026-08-02-docker-desktop/README.md): three canonical evaluator candidate/scorer reports for planted-secret, mount/environment, credential, network/socket, privilege, and cleanup boundaries.

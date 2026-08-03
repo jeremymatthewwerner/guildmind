@@ -23,10 +23,13 @@ infrastructure errors. Fixtures 001–005 are therefore development-qualified; t
 require inclusion in the final frozen schedule and native rootless x86_64 reference-host
 repetition. Fixtures 006–009 now have committed directories and exact controls and have
 passed both their three-repeat trusted-local pristine/gold gate and their three-repeat
-two-phase development-container gate. Their separately frozen cumulative campaign
-remains pending. Rows 010–020 remain a construction plan. Development-qualified or
-planned rows may not be counted in the final campaign denominator, and the five-attempt
-calibration may not be relabeled as the final Stage 1 denominator.
+two-phase development-container gate. A separately committed cumulative campaign then
+reconciled all nine fixtures as expected with zero infrastructure errors. Fixtures
+001–009 are therefore development-qualified; they still require inclusion in the final
+frozen schedule and native rootless x86_64 reference-host repetition. Rows 010–020 remain
+a construction plan. Development-qualified or planned rows may not be counted in the
+final campaign denominator, and neither calibration may be relabeled as the final Stage
+1 denominator.
 
 ## Anti-duplication and acceptance rules
 
@@ -60,10 +63,10 @@ A fixture is eligible only if all of the following hold:
 | 003 | `merge_intervals(intervals)` | Ordering plus closed-integer interval coalescing | nested integer lists | unsorted containment, adjacency, negatives, empty input | Development-qualified; reference pending |
 | 004 | `resolve_pointer(document, pointer)` | Escaped-token traversal across maps and arrays | arbitrary nested JSON | RFC 6901 `~0`/`~1`, root pointer, empty key, list index | Development-qualified; reference pending |
 | 005 | `dedupe_by(records, key)` | Stable first-wins deduplication by structural JSON identity | list of objects | falsy, list-valued, and object-valued keys while preserving order | Development-qualified; reference pending |
-| 006 | `decode_runs(encoded)` | Stateful run-length parser with multi-digit counts | string → list/null | multi-digit runs, escaped literal separators, zero/invalid run policy | Development-container qualified; campaign/reference pending |
-| 007 | `apportion(total, weights)` | Exact largest-remainder integer allocation and deterministic ties | integer + integer list | exact total, zero weights, index tie break, >53-bit values | Development-container qualified; campaign/reference pending |
-| 008 | `topological_order(nodes, edges)` | Graph dependency resolution with stable ready-queue order | strings + edge pairs | disconnected graph, diamond, dynamic lexical tie, cycle result | Development-container qualified; campaign/reference pending |
-| 009 | `apply_changes(document, changes)` | Ordered immutable-style nested state transformation | nested JSON + operations | root/nested set, delete/insert, order-sensitive list indexes | Development-container qualified; campaign/reference pending |
+| 006 | `decode_runs(encoded)` | Stateful run-length parser with multi-digit counts | string → list/null | multi-digit runs, escaped literal separators, zero/invalid run policy | Development-qualified; reference pending |
+| 007 | `apportion(total, weights)` | Exact largest-remainder integer allocation and deterministic ties | integer + integer list | exact total, zero weights, index tie break, >53-bit values | Development-qualified; reference pending |
+| 008 | `topological_order(nodes, edges)` | Graph dependency resolution with stable ready-queue order | strings + edge pairs | disconnected graph, diamond, dynamic lexical tie, cycle result | Development-qualified; reference pending |
+| 009 | `apply_changes(document, changes)` | Ordered immutable-style nested state transformation | nested JSON + operations | root/nested set, delete/insert, order-sensitive list indexes | Development-qualified; reference pending |
 | 010 | `wrap_words(words, width)` | Greedy formatting with exact whitespace and overflow policy | string list + integer | exact-fit, oversized token, empty input, multiple lines | Planned |
 | 011 | `business_days(start, end, holidays)` | Date parsing and inclusive/exclusive calendar boundary | ISO strings + list | weekend endpoints, leap day, holiday/weekend overlap | Planned |
 | 012 | `parse_roman(text)` | Symbol parser with subtractive-pair validation | string | repeated symbols, legal subtraction, canonical rejection result | Planned |
@@ -165,8 +168,24 @@ The self-bound [Batch 002 report](evidence/fixture-qualification/2026-08-03-batc
 records the exact source revision, image, patch, protocol, response, completion, and
 evaluation-binding identities. An always-on verifier recomputes the report and source
 identities; an opt-in live test reproduced all result bindings from fresh containers.
-The host remained rootful Docker Desktop on Apple Silicon, so the cumulative campaign
-and native rootless x86_64 reference-host repetition are still pending.
+The host remained rootful Docker Desktop on Apple Silicon, so native rootless x86_64
+reference-host repetition is still pending.
+
+## Second-batch local campaign calibration
+
+The immutable
+[`stage1-local-batch-002-v1`](../campaigns/stage1-local-batch-002-v1.json) manifest adds
+fixtures 001–009 to one explicit round with seeds 2001–2009, one model call per attempt,
+zero retries, and exact code/fixture/patch/evaluator/model/budget identities. It was
+committed before execution and run from a detached, tracked-clean checkout.
+
+All 9/9 declared attempts were terminal, reconciled, expected, replay-valid, and
+storage-clean; the aggregate report contained 126 events and zero infrastructure errors.
+A fresh reconciliation of the preserved raw state reproduced the report exactly. The
+[canonical Batch 002 evidence](evidence/reliability-campaigns/2026-08-03-batch-002-local-calibration/README.md)
+is strict-schema and hash-bound and is reloaded by the repository test suite. This proves
+the local campaign harness across nine semantic families. Nine observations are not the
+100-attempt Stage 1 denominator and do not establish a population reliability rate.
 
 ## Batch protocol
 

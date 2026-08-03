@@ -115,7 +115,9 @@ information about a population rate. The manifest's threshold acts as an exact
 development gate—any one infrastructure error would have failed it—not as a confidence
 claim.
 
-The next corpus checkpoint is fixtures 006–009 as a second reviewed breadth batch, while
-the eventual acceptance path still requires all 20 fixtures, a separately frozen
+The next corpus checkpoint described here was subsequently completed: fixtures 006–009
+passed their local and development-container gates and joined the separately frozen
+[cumulative Batch 002 calibration](../2026-08-03-batch-002-local-calibration/README.md).
+The eventual acceptance path still requires all 20 fixtures, a separately frozen
 100-attempt schedule, and complete repetition on the native rootless x86_64 reference
 host.

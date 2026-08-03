@@ -138,7 +138,9 @@ repository-owned JSON-call fixtures on one development host. It is **not**:
 - general arbitrary-repository or hostile-command containment; or
 - evidence about provider idempotency, billing, or real-model capability.
 
-The next checkpoint is to freeze a new content-bound cumulative Batch 002 manifest for
-fixtures 001–009 without modifying either accepted historical manifest, then run its
-exact zero-retry schedule from a clean revision into new local state/report paths.
-Reference-host repetition remains required before the Stage 1 verdict can change.
+The next checkpoint described by this artifact was subsequently completed without
+modifying either accepted historical manifest: the separately frozen cumulative
+fixtures 001–009 schedule produced the
+[Batch 002 local calibration](../../reliability-campaigns/2026-08-03-batch-002-local-calibration/README.md).
+Reference-host repetition and the final 20-fixture denominator remain required before
+the Stage 1 verdict can change.
