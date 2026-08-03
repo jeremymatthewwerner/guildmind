@@ -1,0 +1,220 @@
+{
+  "attempts": [
+    {
+      "attempt_id": "stage1-local-batch-003-r001-fixture-001",
+      "fixture_id": "fixture-001-python-addition",
+      "round_index": 0,
+      "seed": 3001
+    },
+    {
+      "attempt_id": "stage1-local-batch-003-r001-fixture-002",
+      "fixture_id": "fixture-002-slug-normalization",
+      "round_index": 0,
+      "seed": 3002
+    },
+    {
+      "attempt_id": "stage1-local-batch-003-r001-fixture-003",
+      "fixture_id": "fixture-003-interval-merge",
+      "round_index": 0,
+      "seed": 3003
+    },
+    {
+      "attempt_id": "stage1-local-batch-003-r001-fixture-004",
+      "fixture_id": "fixture-004-json-pointer",
+      "round_index": 0,
+      "seed": 3004
+    },
+    {
+      "attempt_id": "stage1-local-batch-003-r001-fixture-005",
+      "fixture_id": "fixture-005-stable-dedupe",
+      "round_index": 0,
+      "seed": 3005
+    },
+    {
+      "attempt_id": "stage1-local-batch-003-r001-fixture-006",
+      "fixture_id": "fixture-006-run-decoder",
+      "round_index": 0,
+      "seed": 3006
+    },
+    {
+      "attempt_id": "stage1-local-batch-003-r001-fixture-007",
+      "fixture_id": "fixture-007-apportionment",
+      "round_index": 0,
+      "seed": 3007
+    },
+    {
+      "attempt_id": "stage1-local-batch-003-r001-fixture-008",
+      "fixture_id": "fixture-008-topological-order",
+      "round_index": 0,
+      "seed": 3008
+    },
+    {
+      "attempt_id": "stage1-local-batch-003-r001-fixture-009",
+      "fixture_id": "fixture-009-ordered-changes",
+      "round_index": 0,
+      "seed": 3009
+    },
+    {
+      "attempt_id": "stage1-local-batch-003-r001-fixture-010",
+      "fixture_id": "fixture-010-word-wrap",
+      "round_index": 0,
+      "seed": 3010
+    },
+    {
+      "attempt_id": "stage1-local-batch-003-r001-fixture-011",
+      "fixture_id": "fixture-011-business-days",
+      "round_index": 0,
+      "seed": 3011
+    },
+    {
+      "attempt_id": "stage1-local-batch-003-r001-fixture-012",
+      "fixture_id": "fixture-012-roman-parser",
+      "round_index": 0,
+      "seed": 3012
+    },
+    {
+      "attempt_id": "stage1-local-batch-003-r001-fixture-013",
+      "fixture_id": "fixture-013-grid-rotation",
+      "round_index": 0,
+      "seed": 3013
+    }
+  ],
+  "budget_limits": {
+    "max_container_wall_seconds": null,
+    "max_elapsed_seconds": null,
+    "max_estimated_cost_usd": null,
+    "max_input_tokens": null,
+    "max_model_calls": 1,
+    "max_model_retries": 0,
+    "max_output_tokens": null,
+    "max_tool_calls": 0,
+    "max_tool_cpu_seconds": null,
+    "max_total_tokens": 128,
+    "schema_version": "0.1"
+  },
+  "campaign_id": "stage1-local-batch-003-v1",
+  "candidate_id": "scripted-solo-v0",
+  "code_source_sha256": "481adbbb4b608427ea281ad4d284e9f93a5f17b8aa892fe560c035e09796cfec",
+  "evaluator": {
+    "environment_digest": "sha256:4b5272a947d6b4d85d99cef7beb6221a52cf97f47d91c7c6f0c7a12ddc1076fc",
+    "evaluator_version": "guildmind/local-fixture-v1",
+    "kind": "local"
+  },
+  "evidence_tier": "development",
+  "experiment_id": "experiment-0001",
+  "fixtures": [
+    {
+      "expected_evaluation_outcome": "passed",
+      "expected_run_status": "succeeded",
+      "fixture_id": "fixture-001-python-addition",
+      "fixture_path": "fixtures/001-python-addition",
+      "fixture_tree_sha256": "4265c6d84cea1446996dcd946353482e2fa5dfe9f0f749f44ee63c835454355b",
+      "solution_patch_sha256": "9d22ab07f9a9d126aecfe0935848b3e5614f9e114749240405d70a843261ef8b"
+    },
+    {
+      "expected_evaluation_outcome": "passed",
+      "expected_run_status": "succeeded",
+      "fixture_id": "fixture-002-slug-normalization",
+      "fixture_path": "fixtures/002-slug-normalization",
+      "fixture_tree_sha256": "dd5f8b08960eb477d59569517d96f33c13501804042ab1ae5817b2c389d8caa7",
+      "solution_patch_sha256": "65c7336474ec9bbfb2fe176726b3a7f80dcc0a29b968fe0bdcbfef81605107bb"
+    },
+    {
+      "expected_evaluation_outcome": "passed",
+      "expected_run_status": "succeeded",
+      "fixture_id": "fixture-003-interval-merge",
+      "fixture_path": "fixtures/003-interval-merge",
+      "fixture_tree_sha256": "ebcea1351fa6fae9191e2a8d50596b72b428962da6ba6c6350bd7ade261fd0fa",
+      "solution_patch_sha256": "a7a74f1d583562b06ad7c697f0bc5071866de22e93b842db0fd9041a874497f1"
+    },
+    {
+      "expected_evaluation_outcome": "passed",
+      "expected_run_status": "succeeded",
+      "fixture_id": "fixture-004-json-pointer",
+      "fixture_path": "fixtures/004-json-pointer",
+      "fixture_tree_sha256": "7eb160c885de20936ff60622219cd155d779a1cc6f0b6c5e333354ea9f4e1ffd",
+      "solution_patch_sha256": "5251687282432846492a8a316743429b8922108fb6afacb78fb36560f474aaff"
+    },
+    {
+      "expected_evaluation_outcome": "passed",
+      "expected_run_status": "succeeded",
+      "fixture_id": "fixture-005-stable-dedupe",
+      "fixture_path": "fixtures/005-stable-dedupe",
+      "fixture_tree_sha256": "e9069c84728fc0e1521070e8353d221669c02492933f49fed74403b434ca7fab",
+      "solution_patch_sha256": "816efc61a7a33e418434e244103d6cf7831a523642e3a35314f086a4f2c0f3d2"
+    },
+    {
+      "expected_evaluation_outcome": "passed",
+      "expected_run_status": "succeeded",
+      "fixture_id": "fixture-006-run-decoder",
+      "fixture_path": "fixtures/006-run-decoder",
+      "fixture_tree_sha256": "ab9651ef7ee1b227ef6e2b3020ff4f5bc7211920fddfd0ecc82d790820d9beb8",
+      "solution_patch_sha256": "b59eaaac65a7abfaaaa0a3699df681971c7925a6417960158ccfbd988f8def75"
+    },
+    {
+      "expected_evaluation_outcome": "passed",
+      "expected_run_status": "succeeded",
+      "fixture_id": "fixture-007-apportionment",
+      "fixture_path": "fixtures/007-apportionment",
+      "fixture_tree_sha256": "e77ffdb7c033fa1ad73bfec879941de2830c4440502c2d5c06f13e703fcdc832",
+      "solution_patch_sha256": "c2276cf5f06eeef1dfaa1b2b8b0ce64303bebf5384ae12878002e437f576a937"
+    },
+    {
+      "expected_evaluation_outcome": "passed",
+      "expected_run_status": "succeeded",
+      "fixture_id": "fixture-008-topological-order",
+      "fixture_path": "fixtures/008-topological-order",
+      "fixture_tree_sha256": "d6a699eaaa463e2ac31034b2dca50e601cbc5c29a9958749e77655dc912c250b",
+      "solution_patch_sha256": "c59194b372a0f71a61ede06b9d3b3b39cae7d3b7b3a86f06fc207ceff434d6c6"
+    },
+    {
+      "expected_evaluation_outcome": "passed",
+      "expected_run_status": "succeeded",
+      "fixture_id": "fixture-009-ordered-changes",
+      "fixture_path": "fixtures/009-ordered-changes",
+      "fixture_tree_sha256": "24b7d06dbc1677686c33e8ef572f7b50abcc118f3625324f86336a9cd3eeae1c",
+      "solution_patch_sha256": "9662f9f08983da02326fff511b1f5a8643fe33b308c478d1d04bdd0688abb0ee"
+    },
+    {
+      "expected_evaluation_outcome": "passed",
+      "expected_run_status": "succeeded",
+      "fixture_id": "fixture-010-word-wrap",
+      "fixture_path": "fixtures/010-word-wrap",
+      "fixture_tree_sha256": "454d528d6b6ae3116a14ff3b8121d64c7f95c404c898499440c8d32c62ccd31b",
+      "solution_patch_sha256": "8a53238926cb0c40e2c063665f0158b12a325ec0cc5779dddd3d46bbf882b384"
+    },
+    {
+      "expected_evaluation_outcome": "passed",
+      "expected_run_status": "succeeded",
+      "fixture_id": "fixture-011-business-days",
+      "fixture_path": "fixtures/011-business-days",
+      "fixture_tree_sha256": "4fc6fcbb69b0ebf16fd55133e3265421249b98386c863136f091c4eed09d8029",
+      "solution_patch_sha256": "fdf051b0022fd277ae3f284477cef76e2c93ddb4223ccc86b30b3fc73cbb81df"
+    },
+    {
+      "expected_evaluation_outcome": "passed",
+      "expected_run_status": "succeeded",
+      "fixture_id": "fixture-012-roman-parser",
+      "fixture_path": "fixtures/012-roman-parser",
+      "fixture_tree_sha256": "445bd91ffd8d9cb9df600fce0c722b62e2fa0fdadb1a2e5614f71889bc1ede43",
+      "solution_patch_sha256": "a1776b8c294e42a005d3a3183531ee627985a1ab4793b6d089052c907fe62021"
+    },
+    {
+      "expected_evaluation_outcome": "passed",
+      "expected_run_status": "succeeded",
+      "fixture_id": "fixture-013-grid-rotation",
+      "fixture_path": "fixtures/013-grid-rotation",
+      "fixture_tree_sha256": "c0448661c636cc04dd0f57caa6f8a7eda862e466cd04cb6f56ab0cb9e714f268",
+      "solution_patch_sha256": "980eb874ce43d27673e16029c4f08a4836375eb744319113f88df732bde90335"
+    }
+  ],
+  "maximum_infrastructure_error_rate": 0.01,
+  "model": {
+    "kind": "scripted_patch",
+    "model_id": "guildmind/fake-scripted-patch-v1"
+  },
+  "report_schema_version": "guildmind.reliability-campaign-report/v1",
+  "retry_limit": 0,
+  "rounds": 1,
+  "schema_version": "guildmind.reliability-campaign/v1"
+}
