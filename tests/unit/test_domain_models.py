@@ -239,6 +239,8 @@ def test_json_schema_export_covers_public_models_and_forbids_extras() -> None:
         "EvaluationResult",
         "EventRecord",
         "ExperimentSpec",
+        "ReliabilityCampaignManifest",
+        "ReliabilityCampaignReport",
         "RunManifest",
         "TaskSpec",
     )

@@ -6,6 +6,10 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from guildmind.domain.campaign import (
+    ReliabilityCampaignManifest,
+    ReliabilityCampaignReport,
+)
 from guildmind.domain.models import (
     ArtifactRef,
     BudgetLimits,
@@ -24,6 +28,8 @@ DOMAIN_MODELS: tuple[type[BaseModel], ...] = (
     EvaluationResult,
     EventRecord,
     ExperimentSpec,
+    ReliabilityCampaignManifest,
+    ReliabilityCampaignReport,
     RunManifest,
     TaskSpec,
 )

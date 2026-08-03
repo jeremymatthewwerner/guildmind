@@ -1,0 +1,739 @@
+{
+  "$defs": {
+    "BudgetLimits": {
+      "additionalProperties": false,
+      "description": "Aggregate hard caps for one run; ``None`` means that dimension is uncapped.",
+      "properties": {
+        "max_container_wall_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Container Wall Seconds"
+        },
+        "max_elapsed_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Elapsed Seconds"
+        },
+        "max_estimated_cost_usd": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Estimated Cost Usd"
+        },
+        "max_input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Input Tokens"
+        },
+        "max_model_calls": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Model Calls"
+        },
+        "max_model_retries": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Model Retries"
+        },
+        "max_output_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Output Tokens"
+        },
+        "max_tool_calls": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Tool Calls"
+        },
+        "max_tool_cpu_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Tool Cpu Seconds"
+        },
+        "max_total_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Total Tokens"
+        },
+        "schema_version": {
+          "const": "0.1",
+          "default": "0.1",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "title": "BudgetLimits",
+      "type": "object"
+    },
+    "CampaignAttemptDisposition": {
+      "description": "Exhaustive reconciliation result for one declared attempt.",
+      "enum": [
+        "expected",
+        "unexpected_result",
+        "infrastructure_error",
+        "evidence_missing",
+        "evidence_run_set_invalid",
+        "evidence_nonterminal",
+        "evidence_invalid",
+        "post_commit_maintenance_error"
+      ],
+      "title": "CampaignAttemptDisposition",
+      "type": "string"
+    },
+    "CampaignEvaluatorKind": {
+      "description": "Evaluator adapter selected by the immutable campaign contract.",
+      "enum": [
+        "local",
+        "container"
+      ],
+      "title": "CampaignEvaluatorKind",
+      "type": "string"
+    },
+    "CampaignEvidenceTier": {
+      "description": "Environment class declared before a campaign is executed.",
+      "enum": [
+        "development",
+        "reference"
+      ],
+      "title": "CampaignEvidenceTier",
+      "type": "string"
+    },
+    "ReliabilityCampaignAttempt": {
+      "additionalProperties": false,
+      "description": "One explicit, non-retry schedule entry.",
+      "properties": {
+        "attempt_id": {
+          "pattern": "^[a-z0-9][a-z0-9-]{0,126}[a-z0-9]$",
+          "title": "Attempt Id",
+          "type": "string"
+        },
+        "fixture_id": {
+          "pattern": "^[a-z0-9][a-z0-9-]{0,126}[a-z0-9]$",
+          "title": "Fixture Id",
+          "type": "string"
+        },
+        "round_index": {
+          "minimum": 0,
+          "title": "Round Index",
+          "type": "integer"
+        },
+        "seed": {
+          "minimum": 0,
+          "title": "Seed",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "attempt_id",
+        "fixture_id",
+        "round_index",
+        "seed"
+      ],
+      "title": "ReliabilityCampaignAttempt",
+      "type": "object"
+    },
+    "ReliabilityCampaignAttemptEvidence": {
+      "additionalProperties": false,
+      "description": "One schedule entry reconciled against its isolated evidence directory.",
+      "properties": {
+        "attempt": {
+          "$ref": "#/$defs/ReliabilityCampaignAttempt"
+        },
+        "diagnostic": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Diagnostic"
+        },
+        "disposition": {
+          "$ref": "#/$defs/CampaignAttemptDisposition"
+        },
+        "execution_error_type": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Execution Error Type"
+        },
+        "observed_run_ids": {
+          "items": {
+            "pattern": "^[a-z0-9][a-z0-9-]{0,126}[a-z0-9]$",
+            "type": "string"
+          },
+          "title": "Observed Run Ids",
+          "type": "array"
+        },
+        "recovery_attempted": {
+          "default": false,
+          "title": "Recovery Attempted",
+          "type": "boolean"
+        },
+        "recovery_succeeded": {
+          "default": false,
+          "title": "Recovery Succeeded",
+          "type": "boolean"
+        },
+        "schema_version": {
+          "const": "guildmind.reliability-campaign-attempt/v1",
+          "default": "guildmind.reliability-campaign-attempt/v1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "terminal": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReliabilityCampaignTerminalEvidence"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "attempt",
+        "disposition",
+        "observed_run_ids"
+      ],
+      "title": "ReliabilityCampaignAttemptEvidence",
+      "type": "object"
+    },
+    "ReliabilityCampaignEvaluator": {
+      "additionalProperties": false,
+      "description": "Exact evaluator implementation and immutable execution environment.",
+      "properties": {
+        "environment_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Environment Digest",
+          "type": "string"
+        },
+        "evaluator_version": {
+          "minLength": 1,
+          "title": "Evaluator Version",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/CampaignEvaluatorKind"
+        }
+      },
+      "required": [
+        "kind",
+        "evaluator_version",
+        "environment_digest"
+      ],
+      "title": "ReliabilityCampaignEvaluator",
+      "type": "object"
+    },
+    "ReliabilityCampaignFixture": {
+      "additionalProperties": false,
+      "description": "One complete, content-bound known-outcome fixture tree.",
+      "properties": {
+        "expected_evaluation_outcome": {
+          "const": "passed",
+          "default": "passed",
+          "title": "Expected Evaluation Outcome",
+          "type": "string"
+        },
+        "expected_run_status": {
+          "const": "succeeded",
+          "default": "succeeded",
+          "title": "Expected Run Status",
+          "type": "string"
+        },
+        "fixture_id": {
+          "pattern": "^[a-z0-9][a-z0-9-]{0,126}[a-z0-9]$",
+          "title": "Fixture Id",
+          "type": "string"
+        },
+        "fixture_path": {
+          "minLength": 1,
+          "title": "Fixture Path",
+          "type": "string"
+        },
+        "fixture_tree_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Fixture Tree Sha256",
+          "type": "string"
+        },
+        "solution_patch_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Solution Patch Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "fixture_id",
+        "fixture_path",
+        "fixture_tree_sha256",
+        "solution_patch_sha256"
+      ],
+      "title": "ReliabilityCampaignFixture",
+      "type": "object"
+    },
+    "ReliabilityCampaignManifest": {
+      "additionalProperties": false,
+      "description": "Frozen full-factorial schedule for a normal-fixture reliability campaign.",
+      "properties": {
+        "attempts": {
+          "items": {
+            "$ref": "#/$defs/ReliabilityCampaignAttempt"
+          },
+          "maxItems": 10000,
+          "minItems": 1,
+          "title": "Attempts",
+          "type": "array"
+        },
+        "budget_limits": {
+          "$ref": "#/$defs/BudgetLimits"
+        },
+        "campaign_id": {
+          "pattern": "^[a-z0-9][a-z0-9-]{0,126}[a-z0-9]$",
+          "title": "Campaign Id",
+          "type": "string"
+        },
+        "candidate_id": {
+          "pattern": "^[a-z0-9][a-z0-9-]{0,126}[a-z0-9]$",
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "code_source_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Code Source Sha256",
+          "type": "string"
+        },
+        "evaluator": {
+          "$ref": "#/$defs/ReliabilityCampaignEvaluator"
+        },
+        "evidence_tier": {
+          "$ref": "#/$defs/CampaignEvidenceTier"
+        },
+        "experiment_id": {
+          "pattern": "^[a-z0-9][a-z0-9-]{0,126}[a-z0-9]$",
+          "title": "Experiment Id",
+          "type": "string"
+        },
+        "fixtures": {
+          "items": {
+            "$ref": "#/$defs/ReliabilityCampaignFixture"
+          },
+          "maxItems": 100,
+          "minItems": 1,
+          "title": "Fixtures",
+          "type": "array"
+        },
+        "maximum_infrastructure_error_rate": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Maximum Infrastructure Error Rate",
+          "type": "number"
+        },
+        "model": {
+          "$ref": "#/$defs/ReliabilityCampaignModel"
+        },
+        "report_schema_version": {
+          "const": "guildmind.reliability-campaign-report/v1",
+          "default": "guildmind.reliability-campaign-report/v1",
+          "title": "Report Schema Version",
+          "type": "string"
+        },
+        "retry_limit": {
+          "const": 0,
+          "default": 0,
+          "title": "Retry Limit",
+          "type": "integer"
+        },
+        "rounds": {
+          "exclusiveMinimum": 0,
+          "title": "Rounds",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "guildmind.reliability-campaign/v1",
+          "default": "guildmind.reliability-campaign/v1",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "campaign_id",
+        "evidence_tier",
+        "experiment_id",
+        "candidate_id",
+        "code_source_sha256",
+        "evaluator",
+        "model",
+        "budget_limits",
+        "rounds",
+        "maximum_infrastructure_error_rate",
+        "fixtures",
+        "attempts"
+      ],
+      "title": "ReliabilityCampaignManifest",
+      "type": "object"
+    },
+    "ReliabilityCampaignModel": {
+      "additionalProperties": false,
+      "description": "The only model adapter authorized by the initial reliability harness.",
+      "properties": {
+        "kind": {
+          "const": "scripted_patch",
+          "default": "scripted_patch",
+          "title": "Kind",
+          "type": "string"
+        },
+        "model_id": {
+          "minLength": 1,
+          "title": "Model Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "model_id"
+      ],
+      "title": "ReliabilityCampaignModel",
+      "type": "object"
+    },
+    "ReliabilityCampaignReportBody": {
+      "additionalProperties": false,
+      "description": "Self-contained report body with all aggregate claims strictly derived.",
+      "properties": {
+        "all_expected": {
+          "title": "All Expected",
+          "type": "boolean"
+        },
+        "attempts": {
+          "items": {
+            "$ref": "#/$defs/ReliabilityCampaignAttemptEvidence"
+          },
+          "title": "Attempts",
+          "type": "array"
+        },
+        "campaign_manifest_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Campaign Manifest Sha256",
+          "type": "string"
+        },
+        "campaign_passed": {
+          "title": "Campaign Passed",
+          "type": "boolean"
+        },
+        "code_identity_verified": {
+          "title": "Code Identity Verified",
+          "type": "boolean"
+        },
+        "complete": {
+          "title": "Complete",
+          "type": "boolean"
+        },
+        "expected_attempt_count": {
+          "minimum": 0,
+          "title": "Expected Attempt Count",
+          "type": "integer"
+        },
+        "git_revision": {
+          "minLength": 1,
+          "title": "Git Revision",
+          "type": "string"
+        },
+        "infrastructure_error_count": {
+          "minimum": 0,
+          "title": "Infrastructure Error Count",
+          "type": "integer"
+        },
+        "infrastructure_error_rate": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Infrastructure Error Rate",
+          "type": "number"
+        },
+        "intended_attempt_count": {
+          "exclusiveMinimum": 0,
+          "title": "Intended Attempt Count",
+          "type": "integer"
+        },
+        "manifest": {
+          "$ref": "#/$defs/ReliabilityCampaignManifest"
+        },
+        "reconciled_attempt_count": {
+          "minimum": 0,
+          "title": "Reconciled Attempt Count",
+          "type": "integer"
+        },
+        "recorded_at": {
+          "format": "date-time",
+          "title": "Recorded At",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "guildmind.reliability-campaign-report-body/v1",
+          "default": "guildmind.reliability-campaign-report-body/v1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source_manifest_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Manifest Sha256",
+          "type": "string"
+        },
+        "state_manifest_verified": {
+          "title": "State Manifest Verified",
+          "type": "boolean"
+        },
+        "terminal_attempt_count": {
+          "minimum": 0,
+          "title": "Terminal Attempt Count",
+          "type": "integer"
+        },
+        "threshold_met": {
+          "title": "Threshold Met",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "manifest",
+        "source_manifest_sha256",
+        "campaign_manifest_sha256",
+        "git_revision",
+        "recorded_at",
+        "state_manifest_verified",
+        "code_identity_verified",
+        "attempts",
+        "intended_attempt_count",
+        "terminal_attempt_count",
+        "reconciled_attempt_count",
+        "expected_attempt_count",
+        "infrastructure_error_count",
+        "infrastructure_error_rate",
+        "complete",
+        "all_expected",
+        "threshold_met",
+        "campaign_passed"
+      ],
+      "title": "ReliabilityCampaignReportBody",
+      "type": "object"
+    },
+    "ReliabilityCampaignTerminalEvidence": {
+      "additionalProperties": false,
+      "description": "Verified terminal ledger/replay/storage commitment for one attempt.",
+      "properties": {
+        "evaluation_outcome": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Evaluation Outcome"
+        },
+        "event_count": {
+          "exclusiveMinimum": 0,
+          "title": "Event Count",
+          "type": "integer"
+        },
+        "head_event_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Head Event Sha256",
+          "type": "string"
+        },
+        "ledger_snapshot_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Ledger Snapshot Sha256",
+          "type": "string"
+        },
+        "manifest_revision": {
+          "minimum": 0,
+          "title": "Manifest Revision",
+          "type": "integer"
+        },
+        "manifest_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Manifest Sha256",
+          "type": "string"
+        },
+        "references_verified": {
+          "title": "References Verified",
+          "type": "boolean"
+        },
+        "run_id": {
+          "pattern": "^[a-z0-9][a-z0-9-]{0,126}[a-z0-9]$",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "run_status": {
+          "$ref": "#/$defs/RunStatus"
+        },
+        "semantic_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Semantic Digest",
+          "type": "string"
+        },
+        "storage_clean": {
+          "title": "Storage Clean",
+          "type": "boolean"
+        },
+        "storage_state": {
+          "minLength": 1,
+          "title": "Storage State",
+          "type": "string"
+        },
+        "task_id": {
+          "minLength": 1,
+          "title": "Task Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "task_id",
+        "run_status",
+        "evaluation_outcome",
+        "manifest_revision",
+        "manifest_sha256",
+        "event_count",
+        "head_event_sha256",
+        "semantic_digest",
+        "ledger_snapshot_sha256",
+        "storage_state",
+        "references_verified",
+        "storage_clean"
+      ],
+      "title": "ReliabilityCampaignTerminalEvidence",
+      "type": "object"
+    },
+    "RunStatus": {
+      "description": "Lifecycle state for an attempted run.",
+      "enum": [
+        "pending",
+        "running",
+        "succeeded",
+        "failed",
+        "cancelled",
+        "timed_out",
+        "budget_exhausted",
+        "infrastructure_error"
+      ],
+      "title": "RunStatus",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Hash-bound canonical envelope for one complete campaign observation.",
+  "properties": {
+    "body": {
+      "$ref": "#/$defs/ReliabilityCampaignReportBody"
+    },
+    "body_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Body Sha256",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "guildmind.reliability-campaign-report/v1",
+      "default": "guildmind.reliability-campaign-report/v1",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "body",
+    "body_sha256"
+  ],
+  "title": "ReliabilityCampaignReport",
+  "type": "object"
+}

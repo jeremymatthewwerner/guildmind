@@ -64,8 +64,8 @@ def test_schema_export_writes_every_public_model(
 
     response = json.loads(capsys.readouterr().out)
     exported = sorted(output.glob("*.schema.json"))
-    assert len(exported) == 8
-    assert len(response["exported"]) == 8
+    assert len(exported) == 10
+    assert len(response["exported"]) == 10
     assert json.loads((output / "event-record.schema.json").read_text())["title"] == "EventRecord"
 
 
