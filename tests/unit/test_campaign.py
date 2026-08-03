@@ -326,6 +326,8 @@ def test_checked_in_campaign_manifest_is_a_valid_contract(
         "stage1-local-batch-001-v1.json",
         "stage1-local-batch-002-v1.json",
         "stage1-local-batch-003-v1.json",
+        "stage1-local-batch-004-v1.json",
+        "stage1-local-batch-005-v1.json",
     ],
 )
 def test_checked_in_historical_manifest_cannot_run_after_source_drift(

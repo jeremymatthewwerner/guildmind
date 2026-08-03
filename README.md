@@ -228,8 +228,9 @@ campaign then produced 20/20 expected, replay-valid, storage-clean terminal atte
 cost. Fresh reconciliation reproduced the
 [canonical Batch 005 calibration report](docs/evidence/reliability-campaigns/2026-08-03-batch-005-local-calibration/README.md)
 exactly. The report honestly retains an ambient-working-directory `+dirty` Git marker;
-its independent code and fixture identities passed, but campaign revision discovery must
-be rooted in the declared repository before the distinct 20 × 5 schedule is frozen.
+its independent code and fixture identities passed. Subsequent provenance hardening now
+roots revision discovery in the declared repository, ignores unrelated untracked files,
+and fails before dispatch on tracked drift. The historical report remains unchanged.
 Twenty observations remain calibration evidence, not the final 100-attempt denominator
 or proof of a 99% population reliability claim.
 

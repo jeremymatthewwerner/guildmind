@@ -588,8 +588,9 @@ Run one deterministic task through a complete isolated lifecycle and reproduce t
   development-container pristine/gold gates, followed by a separately frozen cumulative
   fixtures 001–020 campaign with 20/20 expected terminal results, exact fresh
   reconciliation, and zero infrastructure errors. Its ambient-working-directory
-  `+dirty` Git marker remains an explicit provenance defect to fix before the final
-  schedule. Treat those 20 observations as breadth/calibration evidence only.
+  `+dirty` Git marker remains part of that historical report; a subsequent regression
+  fix binds campaign revision discovery to the declared tracked-clean repository before
+  the final schedule. Treat those 20 observations as breadth/calibration evidence only.
 - Freeze the real normal-fixture campaign separately after all 20 distinct fixtures are
   accepted. Use five explicit round-major attempts per fixture, fixed attempt IDs and
   seeds, no hidden retry, and one report whose infrastructure-error numerator and

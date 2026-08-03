@@ -347,9 +347,10 @@ streams, and storage commitments.
 The report retains a `+dirty` descriptive Git marker caused by the CLI consulting its
 ambient main-worktree directory, which contained an unrelated untracked audio file,
 rather than the declared detached repository root. Independent content identities all
-verified, but that provenance weakness must be corrected before the final schedule is
-frozen. The final 20 × 5 campaign and reference-host repetition remain pending. No
-provider or hosted runtime was used.
+verified. A subsequent regression fix now derives the revision from the declared
+repository, ignores unrelated untracked files, and rejects tracked drift before dispatch;
+the historical report remains unchanged. The final 20 × 5 campaign and reference-host
+repetition remain pending. No provider or hosted runtime was used.
 
 ## Batch protocol
 

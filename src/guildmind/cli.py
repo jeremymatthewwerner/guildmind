@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from guildmind.domain import export_json_schemas
-from guildmind.evaluation import LocalEvaluator, load_fixture
+from guildmind.evaluation import LocalEvaluator, load_fixture, require_tracked_clean_revision
 from guildmind.models import ScriptedPatchModel
 from guildmind.runtime.campaign import (
     CampaignConfigurationError,
@@ -508,7 +508,7 @@ def _run_campaign(arguments: argparse.Namespace) -> int:
         report = run_reliability_campaign(
             campaign,
             state_directory=arguments.state_dir,
-            git_revision=_code_revision(),
+            git_revision=_campaign_code_revision(campaign.repository_root),
         )
         write_reliability_campaign_report(report, output)
     except (CampaignConfigurationError, CampaignEvidenceError) as error:
@@ -895,6 +895,17 @@ def _code_revision() -> str:
     except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return "unknown"
     return f"{revision}+dirty" if dirty else revision
+
+
+def _campaign_code_revision(repository: Path) -> str:
+    """Bind campaign provenance to its declared tracked-clean repository."""
+
+    try:
+        return require_tracked_clean_revision(repository)
+    except (OSError, RuntimeError, subprocess.SubprocessError) as error:
+        raise CampaignConfigurationError(
+            f"campaign repository revision is unavailable: {error}"
+        ) from error
 
 
 def _print_json(value: Any) -> None:

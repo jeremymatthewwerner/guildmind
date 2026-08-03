@@ -12,9 +12,9 @@ clean tested revision
 `6492d5580fae5ab11de8cd3231cf1f91f99f4395`, while the Batch 004 cumulative campaign
 report is bound to clean tested revision
 `a856db8f152e2c37426bde6301a96b34c805e1aa`<br>
-**Repository gates:** current default 704 passed / 48 declared skips; 206 files
+**Repository gates:** current default 708 passed / 48 declared skips; 206 files
 formatted; Ruff clean and strict mypy clean across 83 source files. The complete
-dual-image development gate is 739 passed / 13 declared skips, using the preserved
+dual-image development gate is 743 passed / 13 declared skips, using the preserved
 Batch 001–003 image and the current image for Batches 004–005<br>
 **Overall verdict:** useful local development substrate; authoritative Stage 1 gate
 still **NOT PASSED**
@@ -56,8 +56,8 @@ completed 20/20 expected attempts with 280 replay-valid events, zero retries/rec
 zero infrastructure errors, and zero provider cost. Fresh reconciliation reproduced its
 [canonical report](../evidence/reliability-campaigns/2026-08-03-batch-005-local-calibration/README.md)
 exactly. The report preserves an ambient-working-directory `+dirty` Git marker despite
-independently verified content identities; revision discovery must be corrected before
-the final schedule is frozen.
+independently verified content identities. A subsequent regression fix now binds revision
+discovery to the declared tracked-clean repository; the historical report stays intact.
 
 The repository also contains a two-phase container evaluator and active resource and
 containment probes. Those have strong development evidence on Docker Desktop, but they
@@ -447,8 +447,8 @@ The final default and development-image gates at this pause point reported:
 ruff format --check: 206 files already formatted
 ruff check: all checks passed
 mypy: 83 source files, no issues found
-pytest (current default): 704 passed, 48 skipped in 20.92s
-pytest (complete dual-image development gate): 739 passed, 13 skipped in 139.27s
+pytest (current default): 708 passed, 48 skipped in 22.41s
+pytest (complete dual-image development gate): 743 passed, 13 skipped in 141.17s
 ```
 
 With both development images configured, every development-container test ran. The 13
@@ -573,8 +573,8 @@ that is a Docker licensing question, not a Guildmind deployment dependency.
   resume an interrupted aggregate campaign, or constitute the planned 100-attempt
   reliability denominator.
 - The cumulative report's descriptive Git revision has an ambient-CWD `+dirty` suffix;
-  all content identities verified, but the CLI must bind revision discovery to the
-  declared repository root before the final campaign is frozen.
+  all content identities verified, and the CLI now binds future revision discovery to
+  the declared tracked-clean repository. The historical field is intentionally unchanged.
 - The 100-run determinism command is not a fixture-reliability campaign and must not be
   relabeled as one.
 - The rootless x86_64 Linux reference-host gate has not run. `guildmind doctor` correctly
@@ -595,11 +595,7 @@ that is a Docker licensing question, not a Guildmind deployment dependency.
 
 ## Exact next step
 
-Correct campaign Git provenance so revision discovery uses the declared repository root,
-ignores unrelated untracked files, and fails closed on tracked source drift. Cover the
-ambient-CWD regression directly before changing the source identity again.
-
-Then freeze the final 20-fixture × 5-round campaign separately before execution. Neither
+Freeze the final 20-fixture × 5-round campaign separately before execution. Neither
 the 17-fixture nor 20-fixture one-round calibration may be relabelled as that denominator.
 
 A 100-attempt result is an empirical gate, not proof that an underlying population
@@ -632,6 +628,6 @@ make check
 uv run guildmind doctor
 ```
 
-Then fix and test campaign Git provenance as described above before freezing the distinct
-20-fixture × 5-round manifest. Do not edit an accepted manifest, relabel either
-historical image, start provider-backed experiments, or rent a reference host first.
+Then freeze the distinct 20-fixture × 5-round manifest. Do not edit an accepted manifest,
+relabel either historical image, start provider-backed experiments, or rent a reference
+host first.

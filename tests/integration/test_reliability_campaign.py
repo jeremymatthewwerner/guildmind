@@ -1,6 +1,7 @@
 import json
 import shutil
 import sqlite3
+import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -34,6 +35,32 @@ _REPOSITORY_ROOT = Path(__file__).parents[2]
 _FIXTURE_ID = "fixture-001-python-addition"
 _ATTEMPT_ID = "stage1-local-smoke-r001-fixture-001"
 _START = datetime(2026, 8, 3, 12, 0, tzinfo=UTC)
+
+
+def _git(repository: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *arguments],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _freeze_git_repository(repository: Path) -> str:
+    _git(repository, "init")
+    _git(repository, "add", ".")
+    _git(
+        repository,
+        "-c",
+        "user.name=Guildmind Test",
+        "-c",
+        "user.email=guildmind@example.invalid",
+        "commit",
+        "-m",
+        "freeze campaign",
+    )
+    return _git(repository, "rev-parse", "HEAD").stdout.strip()
 
 
 class _RaisingEvaluator:
@@ -70,6 +97,7 @@ def _copy_campaign_repository(tmp_path: Path) -> Path:
         repository / "fixtures" / "001-python-addition",
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo"),
     )
+    (repository / "README.md").write_text("campaign repository\n", encoding="utf-8")
     (repository / "campaigns").mkdir()
     return repository
 
@@ -145,6 +173,7 @@ def _load_campaign(
         + "\n",
         encoding="utf-8",
     )
+    _freeze_git_repository(repository)
     return load_reliability_campaign(manifest, repository_root=repository)
 
 
@@ -415,6 +444,72 @@ def test_campaign_cli_runs_and_publishes_one_development_report(
     assert response["attempt_dispositions"] == ["expected"]
     assert response["output"] == str(output)
     assert load_reliability_campaign_report(output).body.campaign_passed is True
+
+
+def test_campaign_cli_binds_revision_to_declared_repository_not_ambient_cwd(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    campaign = _load_campaign(tmp_path)
+    expected_revision = _git(campaign.repository_root, "rev-parse", "HEAD").stdout.strip()
+    ambient = tmp_path / "ambient"
+    ambient.mkdir()
+    (ambient / "tracked.txt").write_text("ambient\n", encoding="utf-8")
+    _freeze_git_repository(ambient)
+    (ambient / "untracked-audio.m4a").write_bytes(b"unrelated")
+    monkeypatch.chdir(ambient)
+    output = tmp_path / "root-bound-report.json"
+
+    exit_code = main(
+        [
+            "campaign",
+            "run",
+            str(campaign.manifest_path),
+            "--repository-root",
+            str(campaign.repository_root),
+            "--state-dir",
+            str(tmp_path / "root-bound-state"),
+            "--output",
+            str(output),
+        ]
+    )
+
+    response = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert response["campaign_passed"] is True
+    assert load_reliability_campaign_report(output).body.git_revision == expected_revision
+
+
+def test_campaign_cli_rejects_tracked_repository_drift_before_dispatch(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    campaign = _load_campaign(tmp_path)
+    (campaign.repository_root / "README.md").write_text("tracked drift\n", encoding="utf-8")
+    state = tmp_path / "tracked-drift-state"
+    output = tmp_path / "tracked-drift-report.json"
+
+    exit_code = main(
+        [
+            "campaign",
+            "run",
+            str(campaign.manifest_path),
+            "--repository-root",
+            str(campaign.repository_root),
+            "--state-dir",
+            str(state),
+            "--output",
+            str(output),
+        ]
+    )
+
+    response = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert response["schema_version"] == "guildmind.reliability-campaign-error/v1"
+    assert "tracked files must be clean" in response["error"]
+    assert not state.exists()
+    assert not output.exists()
 
 
 def test_campaign_cli_writes_valid_failed_gate_with_exit_two(

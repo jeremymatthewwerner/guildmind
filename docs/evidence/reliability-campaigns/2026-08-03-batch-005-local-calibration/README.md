@@ -103,12 +103,14 @@ not read, staged, or included in the campaign code/fixture identities.
 The canonical report retains the marker exactly rather than rewriting history. The
 manifest's independent code-source hash and all 20 fixture-tree/patch hashes verified,
 so this does not indicate source-byte drift. It is nevertheless a provenance weakness:
-this report must not be described as having a clean Git-marker field. The CLI must bind
-revision discovery to the declared repository root and require tracked-clean state
-before the final 20 × 5 campaign is frozen.
+this report must not be described as having a clean Git-marker field. Subsequent
+hardening binds campaign revision discovery to the declared repository root, ignores
+unrelated untracked files, and rejects tracked drift before state or report creation.
+Direct regression tests cover both the ambient-working-directory case and the fail-closed
+tracked-drift case. This historical report remains byte-for-byte unchanged.
 
-Final repository verification passed **704 tests with 48 declared skips** under the
-default no-image configuration and **739 tests with 13 declared skips** using the
+Final repository verification passed **708 tests with 48 declared skips** under the
+default no-image configuration and **743 tests with 13 declared skips** using the
 preserved Batch 001–003 image plus the current Batch 004–005 image. Every configured
 development-container test ran. Ruff reported 206 formatted files and no lint findings;
 strict mypy passed across 83 source files. The remaining dual-image skips are 11
