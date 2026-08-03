@@ -1,40 +1,54 @@
 """Real-process SIGKILL coverage for atomic CAS publication boundaries.
 
-The child installs test-only wrappers around the no-replace rename or directory
-``fsync``, announces the exact boundary over a pipe, and blocks. The parent sends
-``SIGKILL`` only after that announcement, so the matrix does not depend on timing or
-add production crash hooks.
+The child installs test-only wrappers around temporary creation and writing, file and
+directory ``fsync``, and the no-replace rename. It announces the exact boundary over a
+pipe and blocks. The parent sends ``SIGKILL`` only after that announcement, so the
+matrix does not depend on timing or add production crash hooks.
+
+This is process-crash evidence only. It makes no sudden-power-loss, filesystem,
+storage-controller, or persistence claim beyond observing that the named syscall
+prefix occurred before the child was killed.
 """
 
 from __future__ import annotations
 
+import hashlib
 import multiprocessing
 import os
 import signal
+import stat
 import sys
+import tempfile
 from contextlib import suppress
 from enum import StrEnum
 from multiprocessing.connection import Connection, wait
 from pathlib import Path
-from typing import NoReturn
+from types import TracebackType
+from typing import BinaryIO, NoReturn, Self, cast
 
 import pytest
 
 import guildmind.storage.artifacts as artifact_module
 from guildmind.domain import sha256_bytes
 from guildmind.storage import (
+    ArtifactFinding,
     ArtifactFindingKind,
     FileArtifactStore,
     audit_artifact_store,
 )
 
 _DATA = b"atomic CAS publication crash evidence\n"
+_PARTIAL_PREFIX = _DATA[:13]
+assert 0 < len(_PARTIAL_PREFIX) < len(_DATA)
 
 
 class _PublicationBoundary(StrEnum):
     ROOT_DIRECTORY_CREATED = "root_directory_created"
     SHA256_DIRECTORY_CREATED = "sha256_directory_created"
     SHARD_DIRECTORY_CREATED = "shard_directory_created"
+    TEMP_CREATED = "temp_created"
+    PARTIAL_TEMP_WRITE = "partial_temp_write"
+    PRE_TEMP_FILE_FSYNC = "pre_temp_file_fsync"
     PRE_PUBLICATION = "pre_publication"
     POST_PUBLICATION = "post_publication"
     PRE_DIRECTORY_FSYNC = "pre_directory_fsync"
@@ -44,6 +58,51 @@ def _enter_and_block(barrier: Connection, boundary: _PublicationBoundary) -> NoR
     barrier.send(("entered", boundary.value))
     barrier.recv()
     raise AssertionError("the artifact publication barrier was unexpectedly released")
+
+
+class _PartialWriteStream:
+    """Expose one real flushed prefix, then stop the production ``write`` call."""
+
+    def __init__(
+        self,
+        stream: BinaryIO,
+        temporary: Path,
+        barrier: Connection,
+        boundary: _PublicationBoundary,
+    ) -> None:
+        self._stream = stream
+        self._temporary = temporary
+        self._barrier = barrier
+        self._boundary = boundary
+
+    def __enter__(self) -> Self:
+        self._stream.__enter__()
+        return self
+
+    def __exit__(
+        self,
+        exception_type: type[BaseException] | None,
+        exception: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        self._stream.__exit__(exception_type, exception, traceback)
+
+    def write(self, data: bytes) -> int:
+        if data != _DATA:
+            raise AssertionError("artifact publisher wrote unexpected process-crash bytes")
+        written = self._stream.write(_PARTIAL_PREFIX)
+        if written != len(_PARTIAL_PREFIX):
+            raise AssertionError("partial artifact write did not accept the fixed prefix")
+        self._stream.flush()
+        if self._temporary.read_bytes() != _PARTIAL_PREFIX:
+            raise AssertionError("partial artifact prefix is not visible through its pathname")
+        _enter_and_block(self._barrier, self._boundary)
+
+    def flush(self) -> None:
+        self._stream.flush()
+
+    def fileno(self) -> int:
+        return self._stream.fileno()
 
 
 def _child_publish_at_boundary(
@@ -78,6 +137,69 @@ def _child_publish_at_boundary(
         _PublicationBoundary.SHARD_DIRECTORY_CREATED,
     }:
         os.__dict__["mkdir"] = wrapped_mkdir
+
+    captured_descriptor: int | None = None
+    captured_temporary: Path | None = None
+    real_mkstemp = tempfile.mkstemp
+    real_fdopen = os.fdopen
+    real_fsync = os.fsync
+
+    if boundary in {
+        _PublicationBoundary.TEMP_CREATED,
+        _PublicationBoundary.PARTIAL_TEMP_WRITE,
+        _PublicationBoundary.PRE_TEMP_FILE_FSYNC,
+    }:
+
+        def wrapped_mkstemp(
+            *,
+            prefix: str,
+            dir: str | os.PathLike[str],
+        ) -> tuple[int, str]:
+            nonlocal captured_descriptor, captured_temporary
+            descriptor, temporary_name = real_mkstemp(prefix=prefix, dir=dir)
+            captured_descriptor = descriptor
+            captured_temporary = Path(temporary_name)
+            if prefix != ".artifact-" or captured_temporary.parent != target_parent:
+                raise AssertionError("artifact temporary was created outside its exact shard")
+            opened = os.fstat(descriptor)
+            named = os.lstat(captured_temporary)
+            if (opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino):
+                raise AssertionError("captured descriptor does not name the artifact temporary")
+            if boundary is _PublicationBoundary.TEMP_CREATED:
+                _enter_and_block(barrier, boundary)
+            return descriptor, temporary_name
+
+        tempfile.__dict__["mkstemp"] = wrapped_mkstemp
+
+    if boundary is _PublicationBoundary.PARTIAL_TEMP_WRITE:
+
+        def wrapped_fdopen(descriptor: int, mode: str) -> _PartialWriteStream:
+            if descriptor != captured_descriptor or captured_temporary is None:
+                raise AssertionError("production did not fdopen the captured artifact temporary")
+            stream = cast(BinaryIO, real_fdopen(descriptor, mode))
+            return _PartialWriteStream(stream, captured_temporary, barrier, boundary)
+
+        os.__dict__["fdopen"] = wrapped_fdopen
+
+    if boundary is _PublicationBoundary.PRE_TEMP_FILE_FSYNC:
+
+        def wrapped_fsync(descriptor: int) -> None:
+            if descriptor == captured_descriptor:
+                if captured_temporary is None:
+                    raise AssertionError("artifact temporary path was not captured before fsync")
+                if os.fstat(descriptor).st_size != len(_DATA):
+                    raise AssertionError("artifact temporary is not full-sized before file fsync")
+                opened = os.fstat(descriptor)
+                named = os.lstat(captured_temporary)
+                if (opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino):
+                    raise AssertionError("temporary path changed before its file fsync")
+                if captured_temporary.read_bytes() != _DATA:
+                    raise AssertionError("full artifact bytes are not visible before file fsync")
+                _enter_and_block(barrier, boundary)
+            real_fsync(descriptor)
+
+        os.__dict__["fsync"] = wrapped_fsync
+
     real_rename = artifact_module._rename_noreplace
 
     if boundary is _PublicationBoundary.PRE_PUBLICATION:
@@ -96,7 +218,7 @@ def _child_publish_at_boundary(
             _enter_and_block(barrier, boundary)
 
         artifact_module._rename_noreplace = wrapped_rename
-    else:
+    elif boundary is _PublicationBoundary.PRE_DIRECTORY_FSYNC:
         real_fsync_directory = store._fsync_directory
 
         def wrapped_fsync_directory(directory: Path) -> None:
@@ -162,12 +284,36 @@ def _kill_at_publication_boundary(root: Path, boundary: _PublicationBoundary) ->
         process.close()
 
 
-def _audit_finding_kinds(root: Path) -> tuple[ArtifactFindingKind, ...]:
+def _audit_findings(root: Path) -> tuple[ArtifactFinding, ...]:
     reader = FileArtifactStore.open_existing_read_only(root, trusted_base=root.parent)
     audit = audit_artifact_store((), reader)
     assert audit.complete
     assert audit.quarantine_allowed
-    return tuple(finding.kind for finding in audit.findings)
+    return audit.findings
+
+
+def _audit_finding_kinds(root: Path) -> tuple[ArtifactFindingKind, ...]:
+    return tuple(finding.kind for finding in _audit_findings(root))
+
+
+_FileEvidence = tuple[int, int, int, int, int, int, int, str]
+
+
+def _single_link_file_evidence(path: Path) -> _FileEvidence:
+    metadata = path.lstat()
+    assert stat.S_ISREG(metadata.st_mode)
+    assert stat.S_IMODE(metadata.st_mode) == 0o600
+    assert metadata.st_nlink == 1
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        stat.S_IMODE(metadata.st_mode),
+        metadata.st_nlink,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        metadata.st_ctime_ns,
+        hashlib.sha256(path.read_bytes()).hexdigest(),
+    )
 
 
 def _prepare_directory_creation_boundary(root: Path, boundary: _PublicationBoundary) -> None:
@@ -253,6 +399,97 @@ def test_restart_repairs_mkdir_durability_before_artifact_publication(
     reason="requires POSIX SIGKILL and a supported exclusive-rename host",
 )
 @pytest.mark.parametrize(
+    ("boundary", "expected_temporary_bytes"),
+    (
+        (_PublicationBoundary.TEMP_CREATED, b""),
+        (_PublicationBoundary.PARTIAL_TEMP_WRITE, _PARTIAL_PREFIX),
+        (_PublicationBoundary.PRE_TEMP_FILE_FSYNC, _DATA),
+    ),
+    ids=("temp-created", "partial-temp-write", "pre-temp-file-fsync"),
+)
+def test_temporary_write_process_crash_preserves_exact_evidence_across_retries(
+    tmp_path: Path,
+    boundary: _PublicationBoundary,
+    expected_temporary_bytes: bytes,
+) -> None:
+    root = tmp_path / boundary.value / "artifacts"
+    digest = sha256_bytes(_DATA)
+    preparer = FileArtifactStore(root, trusted_base=root.parent)
+    target_parent = preparer._artifact_parent(digest, create=True)
+    canonical = target_parent / digest
+
+    _kill_at_publication_boundary(root, boundary)
+
+    assert not canonical.exists()
+    shard_entries = tuple(target_parent.iterdir())
+    assert len(shard_entries) == 1
+    crashed_temporary = shard_entries[0]
+    assert crashed_temporary.name.startswith(".artifact-")
+    assert crashed_temporary.parent == target_parent
+    assert crashed_temporary.read_bytes() == expected_temporary_bytes
+    crashed_evidence = _single_link_file_evidence(crashed_temporary)
+    assert crashed_evidence[4] == len(expected_temporary_bytes)
+    assert crashed_evidence[7] == sha256_bytes(expected_temporary_bytes)
+
+    temporary_relative = crashed_temporary.relative_to(root).as_posix()
+    canonical_relative = canonical.relative_to(root).as_posix()
+    assert _audit_findings(root) == (
+        ArtifactFinding(
+            kind=ArtifactFindingKind.TEMP_ORPHAN,
+            relative_path=temporary_relative,
+            size_bytes=len(expected_temporary_bytes),
+        ),
+    )
+
+    retry_store = FileArtifactStore(root, trusted_base=root.parent)
+    first_retry = retry_store.put_bytes(_DATA, media_type="application/octet-stream")
+
+    assert first_retry.sha256 == digest
+    assert canonical.read_bytes() == _DATA
+    canonical_evidence = _single_link_file_evidence(canonical)
+    assert _single_link_file_evidence(crashed_temporary) == crashed_evidence
+    assert tuple(sorted(entry.name for entry in target_parent.iterdir())) == tuple(
+        sorted((crashed_temporary.name, digest))
+    )
+    expected_findings = tuple(
+        sorted(
+            (
+                ArtifactFinding(
+                    kind=ArtifactFindingKind.TEMP_ORPHAN,
+                    relative_path=temporary_relative,
+                    size_bytes=len(expected_temporary_bytes),
+                ),
+                ArtifactFinding(
+                    kind=ArtifactFindingKind.VALID_FINALIZED_ORPHAN,
+                    relative_path=canonical_relative,
+                    expected_sha256=digest,
+                    observed_sha256=digest,
+                    size_bytes=len(_DATA),
+                ),
+            ),
+            key=lambda finding: (finding.kind.value, finding.relative_path),
+        )
+    )
+    assert _audit_findings(root) == expected_findings
+
+    second_retry = retry_store.put_bytes(_DATA, media_type="application/octet-stream")
+
+    assert second_retry == first_retry
+    assert retry_store.get_bytes(second_retry) == _DATA
+    assert _single_link_file_evidence(canonical) == canonical_evidence
+    assert _single_link_file_evidence(crashed_temporary) == crashed_evidence
+    assert tuple(sorted(entry.name for entry in target_parent.iterdir())) == tuple(
+        sorted((crashed_temporary.name, digest))
+    )
+    assert _audit_findings(root) == expected_findings
+
+
+@pytest.mark.skipif(
+    not hasattr(signal, "SIGKILL")
+    or (sys.platform != "darwin" and not sys.platform.startswith("linux")),
+    reason="requires POSIX SIGKILL and a supported exclusive-rename host",
+)
+@pytest.mark.parametrize(
     ("boundary", "expected_before_retry"),
     (
         (
@@ -317,4 +554,4 @@ def test_artifact_publication_recovers_from_real_process_kill(
         if boundary is _PublicationBoundary.PRE_PUBLICATION
         else (ArtifactFindingKind.VALID_FINALIZED_ORPHAN,)
     )
-    assert set(_audit_finding_kinds(root)) == set(expected_after_retry)
+    assert _audit_finding_kinds(root) == expected_after_retry

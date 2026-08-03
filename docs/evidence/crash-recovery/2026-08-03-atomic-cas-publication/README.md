@@ -137,6 +137,19 @@ the target, preserved both sets of bytes, and observed a single link:
 linux renameat2 no-replace: passed
 ```
 
+## Subsequent temporary-write crash matrix
+
+The follow-up [CAS temporary-write checkpoint](../2026-08-03-cas-temporary-write/README.md)
+adds the three userspace prefixes that were still open here: immediately after the real
+temporary creation, after a fixed proper prefix has been written and flushed, and after
+the full bytes have been flushed but immediately before file `fsync`. Each killed
+temporary remains an exact typed audit finding across two retries while the first retry
+publishes one canonical blob and the second preserves its inode. Together with this
+checkpoint's pre-publication case—which is after file `fsync`, close, and byte/identity
+verification—the local CAS publication process-crash sequence is covered from temporary
+creation through final directory sync. Real-process competing-publisher stress,
+power-loss durability, and rootless x86_64 reference-host repetition remain separate.
+
 ## Evidence boundary
 
 The full test suite and synchronized kill matrix executed the Darwin branch on this host.

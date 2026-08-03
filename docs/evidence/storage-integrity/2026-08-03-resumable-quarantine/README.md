@@ -178,7 +178,9 @@ nonclaims are:
 - an actively hostile same-UID process that ignores `flock` or races pathnames;
 - revocation of descriptors that another process already opened;
 - deletion, garbage collection, secure erasure, or automatic startup quarantine;
-- the remaining CAS temporary-create/partial-write/file-`fsync` kill points; and
+- real-process concurrent CAS publisher stress (the temporary-create/partial-write/
+  file-`fsync` kills now have a separate
+  [local checkpoint](../../crash-recovery/2026-08-03-cas-temporary-write/README.md)); and
 - native rootless x86_64 Linux reference-host validation.
 
 No external repository, arbitrary model-generated command, provider-backed pilot,

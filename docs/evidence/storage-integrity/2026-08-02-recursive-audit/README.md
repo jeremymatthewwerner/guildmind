@@ -204,7 +204,10 @@ publishing ACTIVE or moving a source.
 Candidate moves use descriptor-relative same-filesystem atomic no-replace rename and
 directory-sync ordering. Restart revalidates the original ledger/reachable commitment,
 requires every planned file at exactly its source or destination, and can repair the
-post-rename/pre-receipt window. The implementation includes deterministic interruption
-regressions, not yet the complete spawned-process `SIGKILL`/concurrency matrix. The
-same-UID, power-loss, remaining CAS, provider, reference-host, and 99% campaign limits
-therefore remain, and Stage 1 is still **NOT PASSED**.
+post-rename/pre-receipt window. The later
+[quarantine process matrix](../2026-08-03-quarantine-process-crash/README.md) completes
+the local spawned-process `SIGKILL` and cooperating-process cases, while the
+[CAS temporary-write matrix](../../crash-recovery/2026-08-03-cas-temporary-write/README.md)
+completes the local CAS write-prefix kills. Hostile same-UID races, power loss,
+real-process CAS publisher contention, provider behavior, reference-host repetition,
+and the 99% campaign remain, so Stage 1 is still **NOT PASSED**.

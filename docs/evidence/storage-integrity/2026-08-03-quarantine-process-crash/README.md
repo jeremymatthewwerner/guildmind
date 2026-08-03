@@ -215,12 +215,13 @@ does not revoke descriptors, secure-delete bytes, garbage-collect payloads, or r
 quarantine automatically at startup. Network filesystems and filesystems without the
 required atomic no-replace primitive remain outside the claim.
 
-The remaining Stage 1 gaps include:
+The subsequent [CAS temporary-write checkpoint](../../crash-recovery/2026-08-03-cas-temporary-write/README.md)
+closes the local temporary-create, partial-write, and file-`fsync` kill points that were
+open when this matrix was first recorded. The remaining Stage 1 gaps include:
 
 - running this complete matrix, with repetition, on the dedicated native rootless
   x86_64 Linux reference host and preserving host/filesystem evidence;
-- the still-open CAS temporary-create, partial-write, and file-`fsync` kill points plus
-  concurrent CAS publisher stress;
+- real-process concurrent CAS publisher stress;
 - separate credible sudden-power-loss/storage-fault evidence if that stronger
   durability claim is required;
 - hostile same-UID and already-open-descriptor races, which require a stronger isolation

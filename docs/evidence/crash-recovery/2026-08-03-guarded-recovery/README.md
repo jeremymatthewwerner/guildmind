@@ -133,17 +133,18 @@ participating in the lease protocol.
 
 ## Remaining Stage 1 gates
 
-- implement resumable, crash-safe quarantine; this checkpoint deliberately preserves
-  all unreferenced blobs;
-- extend the six exact atomic publication kills with CAS temporary creation/partial
-  write/file `fsync`, remaining durability boundaries, and quarantine moves;
-- stress cooperative concurrent writers, open-process recovery, and CAS publication
-  races;
-- exercise real-provider idempotency, status polling, SDK retry suppression,
-  duplicate-execution treatment, and invoice/usage reconciliation;
-- repeat the complete sandbox, evaluator, resource, containment, and recovery matrix on
-  the dedicated rootless x86_64 reference host; and
-- run the predeclared normal-fixture campaign with at least 99% free of infrastructure
+- The subsequent [resumable quarantine](../../storage-integrity/2026-08-03-resumable-quarantine/README.md),
+  [quarantine process matrix](../../storage-integrity/2026-08-03-quarantine-process-crash/README.md),
+  and [CAS temporary-write matrix](../2026-08-03-cas-temporary-write/README.md) close
+  the local protocol, quarantine-move, and remaining CAS write-prefix items that were
+  open at this checkpoint.
+- Stress real-process CAS publisher contention, hostile same-UID actors, and broader
+  open-process recovery races.
+- Exercise real-provider idempotency, status polling, SDK retry suppression,
+  duplicate-execution treatment, and invoice/usage reconciliation.
+- Repeat the complete sandbox, evaluator, resource, containment, and recovery matrix on
+  the dedicated rootless x86_64 reference host.
+- Run the predeclared normal-fixture campaign with at least 99% free of infrastructure
   error.
 
 The recovery command is explicit; Guildmind does not yet sweep and recover abandoned

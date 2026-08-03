@@ -59,7 +59,7 @@ This closes the explicit recovery-integration gap, not the full normative startu
 
 ### 2026-08-03 publication and maintenance prerequisites
 
-The [atomic no-replace publication checkpoint](../evidence/crash-recovery/2026-08-03-atomic-cas-publication/README.md) replaces the crash-exposed hard-link/unlink publication pair with Darwin `renamex_np(..., RENAME_EXCL)` and Linux `renameat2(..., RENAME_NOREPLACE)`, with no overwrite-capable fallback. Six pipe-synchronized Darwin `SIGKILL` cases cover root, `sha256`, and shard `mkdir` after creation but before parent `fsync`, immediately before rename, immediately after rename, and after rename before directory `fsync`. A narrow Linux/arm64 container smoke exercises the production syscall helper. These results are not power-loss evidence or full rootless x86_64 Linux integration, and temporary creation/partial-write/file-`fsync` kill points remain open.
+The [atomic no-replace publication checkpoint](../evidence/crash-recovery/2026-08-03-atomic-cas-publication/README.md) replaces the crash-exposed hard-link/unlink publication pair with Darwin `renamex_np(..., RENAME_EXCL)` and Linux `renameat2(..., RENAME_NOREPLACE)`, with no overwrite-capable fallback. Six pipe-synchronized Darwin `SIGKILL` cases cover root, `sha256`, and shard `mkdir` after creation but before parent `fsync`, immediately before rename, immediately after rename, and after rename before directory `fsync`. The follow-up [temporary-write checkpoint](../evidence/crash-recovery/2026-08-03-cas-temporary-write/README.md) adds real kills after temporary creation, after a fixed partial write, and immediately before file `fsync`; exact stale temporary evidence survives while two retries publish and preserve one canonical blob. A narrow Linux/arm64 container smoke exercises the production syscall helper. These results are not power-loss evidence or full rootless x86_64 Linux integration. Real-process competing publishers remain open.
 
 The [cooperative maintenance-lease checkpoint](../evidence/storage-integrity/2026-08-03-maintenance-lease/README.md) adds one persistent state-local single-link lock opened and created without following its leaf. Fixture publication holds a shared nonblocking `flock` from before its first CAS write through the final SQLite bind. Guarded recovery and budget terminalization hold the same shared lease from before their fresh audit through final commit; nested same-process recovery safely reuses the shared kernel handle. Exclusive maintenance conflicts with either mode, and a valid `quarantine/v1/ACTIVE` marker blocks shared mutation. A missing, non-directory, or symlinked state leaf remains no-create. Any existing real state directory with a usable lock path—including empty or damaged storage, an unknown run, or an ACTIVE fence—may gain and synchronize the persistent lock before later classification or denial. Spawned-process tests cover shared coexistence, exclusive exclusion, inherited-fork cleanup, abrupt parent exit, and kernel release after `SIGKILL`.
 
@@ -85,9 +85,9 @@ The implementation and in-process interruption/fault regressions establish this 
 surface. A follow-up [local Darwin matrix](../evidence/storage-integrity/2026-08-03-quarantine-process-crash/README.md)
 covers all 16 predeclared quarantine `SIGKILL` prefixes plus six cooperating
 publisher/maintainer/resumer cases, fresh-process completion, and an identity-preserving
-second no-op. Broader open-process and hostile same-UID stress,
-remaining CAS publication kill points, power-loss testing, and rootless x86_64
-reference-host repetition remain required.
+second no-op. Broader open-process and hostile same-UID stress, real-process CAS
+publisher contention, power-loss testing, and rootless x86_64 reference-host repetition
+remain required.
 
 ## Consequences
 
