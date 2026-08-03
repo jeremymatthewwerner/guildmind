@@ -1,8 +1,6 @@
 <p align="center">
-  <img src="assets/guildmind-logo.svg" alt="Guildmind logo: three agents connected through a shared spark inside a guild crest" width="220">
+  <img src="assets/guildmind-logo.svg" alt="Guildmind logo: three agents connected to a shared spark inside a guild crest" width="560">
 </p>
-
-<h1 align="center">Guildmind</h1>
 
 <p align="center"><strong>Evolving institutions for artificial collective intelligence.</strong></p>
 

@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">Guildmind mark</title>
+  <desc id="description">Three agents connected to a shared spark inside a guild crest.</desc>
+
+  <style>
+    .line {
+      fill: none;
+      stroke: #111111;
+      stroke-width: 9;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .line {
+        stroke: #F5F5F5;
+      }
+    }
+  </style>
+
+  <path
+    class="line"
+    d="M256 48C307 86 367 110 432 120V247C432 346 366 423 256 466C146 423 80 346 80 247V120C145 110 205 86 256 48Z"
+  />
+
+  <path class="line" d="M180 180L228 228" />
+  <path class="line" d="M332 180L284 228" />
+  <path class="line" d="M256 340V318" />
+
+  <circle class="line" cx="160" cy="160" r="28" />
+  <circle class="line" cx="352" cy="160" r="28" />
+  <circle class="line" cx="256" cy="368" r="28" />
+
+  <path
+    class="line"
+    d="M256 216C262 239 274 251 297 257C274 263 262 275 256 298C250 275 238 263 215 257C238 251 250 239 256 216Z"
+  />
+</svg>
