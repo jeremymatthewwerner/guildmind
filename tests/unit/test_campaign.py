@@ -302,6 +302,7 @@ def test_loader_rejects_fixture_changed_after_manifest_was_frozen(tmp_path: Path
         ("stage1-local-batch-002-v1.json", "stage1-local-batch-002-v1", 9),
         ("stage1-local-batch-003-v1.json", "stage1-local-batch-003-v1", 13),
         ("stage1-local-batch-004-v1.json", "stage1-local-batch-004-v1", 17),
+        ("stage1-local-batch-005-v1.json", "stage1-local-batch-005-v1", 20),
     ],
 )
 def test_checked_in_campaign_manifest_is_a_valid_contract(
