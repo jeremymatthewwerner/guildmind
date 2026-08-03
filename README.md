@@ -27,6 +27,7 @@ Guildmind treats several questions as separate hypotheses:
 - Can an institution improve capability at a fixed budget?
 - Can search discover useful institutions more efficiently than random or manual design?
 - Can reputation, certification, apprenticeship, or institutional memory improve future performance?
+- Can evolution plus reward-trained, bounded institutional control adapt better than either mechanism alone?
 - Can independent judge societies predict human preferences without drifting alongside workers?
 - Do successful institutional rules transfer to new repositories, languages, or domains?
 
@@ -40,7 +41,7 @@ The project will provide a reproducible research platform with:
 - an authoritative budget ledger covering model calls, token classes, tool use, time, and estimated cost;
 - complete candidate lineage, event traces, patches, failures, and replayable evidence;
 - noise-aware search over valid institutional mutations; and
-- later, independently calibrated judge societies and persistent institutional state.
+- later, persistent institutional state, bounded learned controllers, and independently calibrated judge societies.
 
 The first implementation domain is software engineering. Coding tasks provide objective tests, isolated execution, fast iteration, and a strong basis for distinguishing actual improvement from persuasive-looking output.
 
@@ -70,10 +71,11 @@ The work is divided into gated stages:
 5. **Search machinery:** add typed mutations, lineage, archives, and multi-fidelity promotion.
 6. **Exploratory search and sealed confirmation:** select one candidate and obtain a positive, equivocal, negative, or invalid result.
 7. **Persistent institutions:** test reputation, certification, apprenticeship, and durable memory.
-8. **Judge societies:** calibrate independent evaluators against blinded human preferences.
-9. **Transfer:** freeze successful institutions and test them on new distributions and domains.
+8. **Hybrid evolution and reinforcement learning:** evolve institutional constraints and executable policies while training compatible bounded controllers from objective reward.
+9. **Judge societies:** calibrate independent evaluators against blinded human preferences.
+10. **Transfer:** freeze successful institutions and test them on new distributions and domains.
 
-PettingZoo is being considered as an optional environment adapter for inexpensive multi-agent testbeds and later transfer experiments. It will not define Guildmind's core scheduler or the coding-task lifecycle.
+PettingZoo is being considered as an optional environment adapter for inexpensive search and controller-learning testbeds and later transfer experiments. It will not define Guildmind's core scheduler or the coding-task lifecycle.
 
 ## Research principles
 
@@ -95,6 +97,9 @@ Guildmind now has its first deterministic local vertical slice. It can:
 - recover run state after a real process is killed at committed lifecycle, selected
   pre-commit, or model/evaluator in-flight boundaries, producing one replay-valid
   terminal state with conservative budget treatment;
+- bind a verified all-run SQLite snapshot to a bounded recursive CAS audit that
+  verifies committed bytes and typed relationships while classifying unreferenced,
+  temporary, malformed, linked, and corrupt entries without mutating them;
 - run a scripted fake model against a repository-owned coding fixture;
 - validate and apply a constrained patch to a copied workspace;
 - execute trusted local tests or a two-phase black-box container evaluation;
@@ -102,7 +107,7 @@ Guildmind now has its first deterministic local vertical slice. It can:
   environment, credential, and network/socket boundaries with versioned evidence; and
 - verify the event chain, reconstruct terminal state, and compare normalized semantic digests across runs.
 
-The current Stage 1 hardening checkpoint adds a restricted Docker invocation contract, a pinned image-owned two-phase evaluator, and crash recovery that closes an abandoned nonterminal run with explicit terminal evidence. Eleven real-process tests now use pipe-synchronized boundaries and `SIGKILL` to cover five post-commit EventStore prefixes, four selected pre-commit rollback points, and the model-in-flight and evaluator-in-flight FixtureRunner boundaries. These are development controls and bounded process tests, not a claim that CAS-write/orphan handling, concurrency, or hostile-code containment has passed.
+The current Stage 1 hardening checkpoint adds a restricted Docker invocation contract, a pinned image-owned two-phase evaluator, crash recovery that closes an abandoned nonterminal run with explicit terminal evidence, and a read-only ledger/CAS integrity audit. Eleven real-process tests now use pipe-synchronized boundaries and `SIGKILL` to cover five post-commit EventStore prefixes, four selected pre-commit rollback points, and the model-in-flight and evaluator-in-flight FixtureRunner boundaries. The audit independently verifies the complete ledger and its recursively reachable bytes, then inventories filesystem orphans under explicit size/count bounds. These are development controls and bounded process tests, not a claim that recovery gating, CAS-write/orphan quarantine, concurrency, or hostile-code containment has passed.
 
 The implemented path is:
 
@@ -115,13 +120,20 @@ fixture task → fake model → validated patch → copied workspace
 
 This is engineering infrastructure for trusted repository-owned fixtures, not yet a hostile-code sandbox. Evaluator v2 closes the demonstrated same-interpreter false pass for the first fixture: candidate code receives only a patched workspace and expected-value-free JSON challenge, while a fresh scorer container receives the sealed oracle and bounded candidate response but no candidate workspace. Manifest, source, test, and oracle bytes are frozen before model dispatch; the trusted completion binds that frozen identity, and exact bounded candidate/scorer transcripts survive as content-addressed evidence. A strict [adversarial corpus](docs/adversarial-corpus.md) content-addresses 19 patch-intake, functional, boundary-integrity, timeout, output-exhaustion, and OOM cases with exact predeclared outcomes. Nine unsafe shapes now fail before Git application or sandbox dispatch; the other ten cases pass under live development evaluation.
 
-That boundary is deliberately narrow. It covers JSON-callable micro-fixtures, candidate code necessarily observes the call inputs, and it is not a general pytest or arbitrary-repository evaluator. The reproducibly built image ran successfully under the declared restrictions on Docker Desktop, including direct OOM, PID-ceiling, exact writable-space, high-entropy planted-secret, mount/environment, credential, DNS/TCP, host-route, and Unix-socket probes. Both evaluator phases were contained in three repeated reports with verified cleanup. That rootful ARM Linux virtual machine is not the required rootless x86_64 reference host, however, and the probe covers evaluator candidate/scorer requests rather than a not-yet-built general worker dispatcher. The process-kill slice proves committed-prefix recovery, rollback at four mutation-rich pre-commit points, and the two external-work boundaries. It also observes the exact finalized orphan blobs left when response or evaluation references roll back; automatic startup verification, orphan reporting/quarantine, CAS-write kill points, writer races, and real-provider idempotency remain open. External tasks and real model-generated commands remain blocked until the checked-in gold/attack matrix and direct probes pass on the reference host and the remaining crash/CAS work and 99% normal-fixture reliability campaign are complete. The [Stage 1 hardening gate report](docs/reviews/2026-08-01-stage-1-hardening-gate.md) records the exact evidence and retains a **NOT PASSED** verdict; [ADR 0004](docs/decisions/0004-two-phase-python-call-evaluator.md) records the v2 boundary and its limits.
+That boundary is deliberately narrow. It covers JSON-callable micro-fixtures, candidate code necessarily observes the call inputs, and it is not a general pytest or arbitrary-repository evaluator. The reproducibly built image ran successfully under the declared restrictions on Docker Desktop, including direct OOM, PID-ceiling, exact writable-space, high-entropy planted-secret, mount/environment, credential, DNS/TCP, host-route, and Unix-socket probes. Both evaluator phases were contained in three repeated reports with verified cleanup. That rootful ARM Linux virtual machine is not the required rootless x86_64 reference host, however, and the probe covers evaluator candidate/scorer requests rather than a not-yet-built general worker dispatcher. The process-kill slice proves committed-prefix recovery, rollback at four mutation-rich pre-commit points, and the two external-work boundaries. It also observes the exact finalized orphan blobs left when response or evaluation references roll back. A subsequent [recursive storage-integrity audit](docs/evidence/storage-integrity/2026-08-02-recursive-audit/README.md) now re-verifies referenced bytes and classifies those filesystem entries, and a no-create coordinator distinguishes missing, invalid, empty, damaged, orphaned, and healthy ledger/CAS pairs without initializing them. External recovery does not yet enforce that report or move anything. Guarded recovery integration, resumable quarantine, CAS-write kill points, writer races, and real-provider idempotency remain open. External tasks and real model-generated commands remain blocked until the checked-in gold/attack matrix and direct probes pass on the reference host and the remaining crash/CAS work and 99% normal-fixture reliability campaign are complete. The [Stage 1 hardening gate report](docs/reviews/2026-08-01-stage-1-hardening-gate.md) records the exact evidence and retains a **NOT PASSED** verdict; [ADR 0004](docs/decisions/0004-two-phase-python-call-evaluator.md) records the v2 boundary and its limits.
 
 Experiment 0001 also remains a draft until its worker model, spend ceilings, minimum relevant effect, and publication level are approved. Until both that Stage 0 approval and the Stage 1 boundary gate exist, the next work remains fixture hardening—not provider-backed pilots, baselines, genomes, or search.
 
 ## Quick start
 
 Guildmind currently targets Python 3.12 and uses [uv](https://docs.astral.sh/uv/) for its locked environment.
+Everything implemented today runs locally with Git, Python, and `uv`; the scripted
+fixture model makes no paid API calls. Docker Desktop is optional for the container
+evaluator and containment/resource probes. No runtime hosting or deployment service is
+needed at this stage. Later provider-backed campaigns will incur model usage, and the
+authoritative hostile-code gate must eventually be repeated on a clean rootless x86_64
+Linux host, which may be an owned machine or a short-lived rental—there is no reason to
+provision one yet.
 
 ```bash
 uv sync
@@ -173,6 +185,7 @@ overwrite an existing report.
 
 - [Starting brief](docs/starting-brief.md): the thesis, first experiment, evaluation strategy, risks, and research principles.
 - [Staged build plan](docs/build-plan.md): the architecture, benchmark ladder, statistical design, stage gates, implementation roadmap, costs, and first-month backlog.
+- [Hybrid evolution and reinforcement learning](docs/hybrid-evolution-rl.md): the future Stage 8 constraint/policy boundary, RL contract, inheritance semantics, evidence identity, and matched comparison arms.
 - [Experiment 0001 contract](docs/experiments/0001-institutional-search.md): the pilot protocol, claims, task partitions, budget semantics, lockbox rules, and open owner decisions.
 - [Threat model](docs/threat-model.md): assets, trust boundaries, threats, controls, and release gates.
 - [Adversarial evaluator corpus](docs/adversarial-corpus.md): manifest invariants, exact attack outcomes, evidence levels, and the resource-classification boundary.
@@ -180,6 +193,7 @@ overwrite an existing report.
 - [Resource-probe evidence](docs/evidence/resource-probes/2026-08-02-docker-desktop/README.md): three canonical development reports for OOM, PID, writable-byte, and cleanup enforcement.
 - [Containment-probe evidence](docs/evidence/containment-probes/2026-08-02-docker-desktop/README.md): three canonical evaluator candidate/scorer reports for planted-secret, mount/environment, credential, network/socket, privilege, and cleanup boundaries.
 - [Real-process crash-recovery evidence](docs/evidence/crash-recovery/2026-08-02-process-sigkill/README.md): eleven synchronized `SIGKILL` cases across committed lifecycle, selected pre-commit, and runner external-work boundaries, with exact rollback/orphan observations and remaining gaps.
+- [Recursive storage-integrity audit](docs/evidence/storage-integrity/2026-08-02-recursive-audit/README.md): verified ledger-root commitments, typed recursive CAS reachability, bounded orphan inventory, adversarial review outcomes, and the remaining mutation boundary.
 - [Architecture decisions](docs/decisions/): the Python environment, evidence storage, and sandbox/evaluator boundary.
 - [Plan review ledger](docs/reviews/2026-07-31-plan-audit.md): durable dispositions for the benchmark, runtime, and search/evaluation review findings.
 - [Stage 1 hardening gate](docs/reviews/2026-08-01-stage-1-hardening-gate.md): implemented development controls, smoke evidence, remaining adversarial matrix, reference-host procedure, and current verdict.

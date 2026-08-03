@@ -34,22 +34,26 @@ The near-term outcome is not a general artificial civilization. It is credible e
 - **Agent:** One model instance acting with a role, context, tools, and budget.
 - **Society:** A group of agents and the communication topology connecting them.
 - **Institution:** Persistent rules governing how work is assigned, reviewed, accepted, escalated, remembered, and rewarded.
-- **Organizational genome:** A machine-readable specification of a society and its institutional rules.
+- **Organizational genome:** Initially, a machine-readable specification of a society and its deterministic institutional rules. The later Stage 8 representation factors this into an organizational constraint genome `g`—roles, capabilities, hard budgets/governance invariants, and the state-dependent legal-action set—and a separately executable policy program.
 - **Worker society:** The system that attempts a task.
 - **Judge society:** An independent system that assesses work where objective verification is incomplete.
-- **Evolution:** Any generate–evaluate–select–inherit loop over organizational genomes. The first implementation need not imitate biological evolution closely.
+- **Evolution:** Any generate–evaluate–select–inherit loop over complete candidate institutions. Each candidate instantiates a society of roles; selection initially acts on the institution rather than independently evolving worker-model weights.
+- **Institutional policy program:** A restricted, typed executable program `p` that chooses only within the legal-action set defined by `g`; it is not arbitrary source code or a task solution.
+- **Institutional controller:** A trainable policy `π_{p,θ}` that parameterizes `p`, observes bounded institutional state, and selects routing, review, escalation, memory, budget, or termination actions while the runtime independently enforces `g`.
+- **Hybrid evolution–RL:** An outer population search that evolves institutional structure and policy programs while a genuine reinforcement-learning inner loop updates compatible controller parameters from sequential reward.
 
 The distinction between a society and an institution matters. A planner–implementer–reviewer topology is a society design. A rule requiring independent review before acceptance, with an escalation path after disagreement, is institutional.
 
 ## 4. Research questions
 
-The project is organized around five questions:
+The project is organized around six questions:
 
 1. **Capability:** Can institutional search beat a single-agent baseline and strong hand-designed multi-agent baselines?
 2. **Efficiency:** Do gains remain after controlling for tokens, wall-clock time, tool calls, and model invocations?
 3. **Generalization:** Do discovered institutions improve performance on tasks and repositories not used during selection?
 4. **Causality:** Which institutional components produce the gain, and do ablations reproduce that conclusion?
-5. **Evaluation integrity:** Can independently calibrated judges add useful signal without enabling workers and judges to co-adapt toward a misleading proxy?
+5. **Adaptive correction:** Does evolving institutional structure while reinforcement-learning a bounded sequential controller improve held-out adaptation beyond evolution-only and RL-only systems at equal total compute?
+6. **Evaluation integrity:** Can independently calibrated judges add useful signal without enabling workers and judges to co-adapt toward a misleading proxy?
 
 ## 5. First falsifiable experiment
 
@@ -138,11 +142,11 @@ Task corpus -> Experiment runner -> Worker society -> Sandbox/tests
 ```
 
 1. **Task corpus:** immutable task inputs, tests, metadata, and split membership.
-2. **Genome registry:** versioned organizational specifications and parent/child lineage.
+2. **Genome registry:** versioned organizational specifications and parent/child lineage; Stage 8 adds distinct structure/program and controller-checkpoint lineage DAGs.
 3. **Experiment runner:** deterministic orchestration, budget enforcement, and isolation.
 4. **Agent runtime:** role execution, messaging, memory, and tool access.
 5. **Evaluator:** objective test results first; judge and human signals later.
-6. **Evidence store:** prompts, messages, tool traces, patches, scores, costs, seeds, and environment versions.
+6. **Evidence store:** prompts, messages, tool traces, patches, scores, costs, seeds, and environment versions. Future hybrid candidates and run manifests bind the exact `(g, p, θ, s)` phenotype, content-hashed reward contract, compatibility signature, and both lineage heads.
 
 The core abstractions should remain framework-independent. An agent framework may provide plumbing, but Guildmind's research artifact is the institutional representation, search process, and evidence—not a wrapper around a particular framework.
 
@@ -207,7 +211,20 @@ Worker and judge selection must use separate state, lineages, and data partition
 
 **Exit condition:** persistent rules outperform equivalent stateless workflows on longitudinal tasks.
 
-### Phase 4 — Judge societies
+### Phase 4 — Hybrid evolution and reinforcement learning
+
+- Begin the H4 campaign only after the Phase 3/H3 persistence gate passes. A valid negative H3 result may proceed only under a reviewed stateless protocol with `s = ∅` and no persistence claim; an equivocal or invalid H3 result does not authorize it.
+- Add a restricted executable policy layer whose legal actions remain constrained by the institutional genome.
+- Train a bounded controller from explicit observation, action, transition, reward, termination, and truncation contracts.
+- Compare evolution-only, RL-only, Baldwinian, and checkpoint-inheriting Lamarckian/PBT hybrids at equal total compute.
+- Start in cheap machine-gradeable environments, then test routing, review, escalation, retrieval, and budget allocation around fixed worker models.
+- Freeze controller checkpoints before held-out evaluation; never train on the confirmation lockbox or unvalidated judge scores.
+
+**Exit condition:** the hybrid improves frozen-policy held-out performance and adaptation efficiency over both single-mechanism controls without reward leakage or inherited task content.
+
+The detailed boundary, RL contract, inheritance semantics, and comparison arms are specified in [Hybrid evolution and reinforcement learning](hybrid-evolution-rl.md).
+
+### Phase 5 — Judge societies
 
 - Collect a small, blinded human preference dataset.
 - Compare independent judge organizations on calibration and robustness.
@@ -216,7 +233,7 @@ Worker and judge selection must use separate state, lineages, and data partition
 
 **Exit condition:** judge signal predicts held-out human preference and adds value beyond objective tests.
 
-### Phase 5 — Transfer
+### Phase 6 — Transfer
 
 - Freeze successful institutional designs.
 - Transfer them to a new coding distribution, then a non-coding domain.
@@ -227,6 +244,7 @@ Worker and judge selection must use separate state, lineages, and data partition
 ## 9. Non-goals for the first release
 
 - Training or fine-tuning foundation-model weights.
+- Reinforcement-learning institutional controllers in Experiment 0001 or the first release.
 - Building an open-ended autonomous system.
 - Claiming recursive self-improvement from prompt changes alone.
 - Evolving workers and judges together.

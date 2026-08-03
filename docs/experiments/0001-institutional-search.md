@@ -94,7 +94,7 @@ Outcomes are classified before exploratory slicing:
 - **Equivocal:** a valid result meets neither the positive nor negative rule. More evidence requires the same frozen comparison on new data; the champion is not tuned.
 - **Invalid:** leakage, an undeclared intervention, model mismatch, evaluator fault, unaccounted cap violation, or other integrity failure compromises the comparison. Repair requires a fresh lockbox.
 
-Transfer is a later H5 question. A positive H1 result does not become negative merely because a later transfer test fails.
+Transfer is a later H6 question. A positive H1 result does not become negative merely because a later transfer test fails.
 
 ## 6. Task partitions and permitted use
 
@@ -107,7 +107,7 @@ Stage 0 freezes eligibility, construction, QA, exclusion, fingerprinting, and es
 | `search_train` | 120 newly generated, verified tasks across at least 12 repositories | Pilot, factor screen, mutation, racing, promotion, and diagnostics | Adaptive/exploratory |
 | `development_selection` | 48 tasks across at least six repositories from a disjoint repository group | Each search arm submits its frozen finalist slate; opened once | Champion selection only |
 | `confirmation_lockbox` | Fresh real tasks from the deterministic design in Section 8, normally 10–15+ repositories | One frozen paired campaign | Primary H1 evidence |
-| `transfer` | Separately sourced repository/time/domain shift | Opened only under a later protocol | H5 evidence |
+| `transfer` | Separately sourced repository/time/domain shift | Opened only under a later protocol | H6 evidence |
 
 Repository and time groups are disjoint. Near duplicates and faults in the same code region remain in one partition. Search scores, including validation-like checkpoint scores, are search data. `development_selection` supplies no confidence claim.
 
