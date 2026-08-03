@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import difflib
 import os
 import subprocess
 import sys
@@ -8,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from guildmind.domain import sha256_bytes
 from guildmind.evaluation import (
     EvaluationStatus,
     LocalEvaluationResult,
@@ -25,23 +25,6 @@ _FIRST_BATCH = (
 )
 
 
-def _pristine_control_patch(source: Path, destination: Path) -> Path:
-    source_lines = source.read_text(encoding="utf-8").splitlines(keepends=True)
-    modified_lines = [*source_lines, "# pristine-control\n"]
-    relative = source.name
-    unified = difflib.unified_diff(
-        source_lines,
-        modified_lines,
-        fromfile=f"a/{relative}",
-        tofile=f"b/{relative}",
-    )
-    destination.write_text(
-        f"diff --git a/{relative} b/{relative}\n" + "".join(unified),
-        encoding="utf-8",
-    )
-    return destination
-
-
 def _assert_identical_results(
     results: tuple[LocalEvaluationResult, ...],
     expected_status: EvaluationStatus,
@@ -53,7 +36,6 @@ def _assert_identical_results(
 
 @pytest.mark.parametrize(("fixture_name", "implementation"), _FIRST_BATCH)
 def test_first_fixture_batch_has_stable_pristine_and_gold_outcomes(
-    tmp_path: Path,
     fixture_name: str,
     implementation: str,
 ) -> None:
@@ -94,13 +76,25 @@ def test_first_fixture_batch_has_stable_pristine_and_gold_outcomes(
     assert visible.returncode != 0
 
     evaluator = LocalEvaluator()
-    pristine_patch = _pristine_control_patch(
-        spec.pristine_workspace / implementation,
-        tmp_path / f"{fixture_name}-pristine.patch",
+    pristine_patch = fixture_root / "controls" / "pristine.patch"
+    pristine_sha256 = sha256_bytes(pristine_patch.read_bytes())
+    gold_patch = fixture_root / "solution.patch"
+    gold_sha256 = sha256_bytes(gold_patch.read_bytes())
+    pristine_results = tuple(
+        evaluator.evaluate(
+            spec,
+            pristine_patch,
+            expected_patch_sha256=pristine_sha256,
+        )
+        for _ in range(3)
     )
-    pristine_results = tuple(evaluator.evaluate(spec, pristine_patch) for _ in range(3))
     gold_results = tuple(
-        evaluator.evaluate(spec, fixture_root / "solution.patch") for _ in range(3)
+        evaluator.evaluate(
+            spec,
+            gold_patch,
+            expected_patch_sha256=gold_sha256,
+        )
+        for _ in range(3)
     )
 
     _assert_identical_results(pristine_results, EvaluationStatus.TESTS_FAILED)

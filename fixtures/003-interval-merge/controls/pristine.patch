@@ -1,0 +1,6 @@
+diff --git a/intervals.py b/intervals.py
+--- a/intervals.py
++++ b/intervals.py
+@@ -7 +7 @@ def merge_intervals(intervals: list[list[int]]) -> list[list[int]]:
+-    return sorted(intervals)
++    return list(sorted(intervals))

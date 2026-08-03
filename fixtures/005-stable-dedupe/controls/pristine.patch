@@ -1,0 +1,6 @@
+diff --git a/dedupe.py b/dedupe.py
+--- a/dedupe.py
++++ b/dedupe.py
+@@ -9 +9 @@ def dedupe_by(records: list[dict[str, Any]], key: str) -> list[dict[str, Any]]:
+-    return list({record[key]: record for record in records}.values())
++    return [*{record[key]: record for record in records}.values()]

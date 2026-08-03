@@ -1,0 +1,8 @@
+diff --git a/pointer.py b/pointer.py
+--- a/pointer.py
++++ b/pointer.py
+@@ -9,3 +9,3 @@ def resolve_pointer(document: Any, pointer: str) -> Any:
+     if isinstance(document, dict):
+-        return document.get(pointer)
++        return document.get(pointer, None)
+     return None
