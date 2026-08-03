@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import errno
 import fcntl
 import gc
 import os
 import stat
 import sys
+import threading
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -19,6 +22,23 @@ from guildmind.storage.maintenance import (
     MaintenanceIntegrityReason,
     MaintenanceLease,
 )
+
+
+def _reuse_descriptor_from_thread(source_descriptor: int, target_descriptor: int) -> None:
+    errors: list[BaseException] = []
+
+    def reuse() -> None:
+        try:
+            os.dup2(source_descriptor, target_descriptor)
+        except BaseException as error:
+            errors.append(error)
+
+    worker = threading.Thread(target=reuse, name="guildmind-descriptor-reuser")
+    worker.start()
+    worker.join(timeout=10)
+    assert not worker.is_alive()
+    if errors:
+        raise errors[0]
 
 
 def test_shared_lease_is_nested_and_reference_counted_in_one_process(tmp_path: Path) -> None:
@@ -416,6 +436,67 @@ def test_active_quarantine_marker_blocks_shared_but_not_exclusive_maintenance(
         assert marker.is_file()
 
 
+@pytest.mark.parametrize(
+    "aliased_marker",
+    [
+        Path("Quarantine/v1/ACTIVE"),
+        Path("quarantine/V1/ACTIVE"),
+        Path("quarantine/v1/active"),
+    ],
+)
+def test_case_aliased_quarantine_fence_component_is_an_integrity_denial(
+    tmp_path: Path,
+    aliased_marker: Path,
+) -> None:
+    state = tmp_path / "state"
+    marker = state / aliased_marker
+    marker.parent.mkdir(parents=True)
+    marker.write_bytes(b"case-aliased fence")
+    canonical_marker = state / QUARANTINE_ACTIVE_RELATIVE_PATH
+    if not canonical_marker.exists():
+        pytest.skip("filesystem is case-sensitive and permits distinct case aliases")
+
+    with pytest.raises(MaintenanceIntegrityError) as raised:
+        MaintenanceLease.acquire_shared(state)
+
+    assert raised.value.reason is MaintenanceIntegrityReason.QUARANTINE_FENCE_INVALID
+
+
+def test_quarantine_fence_exact_name_scan_has_a_conservative_entry_cap(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeEntry:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+    class FakeScandir:
+        def __enter__(self) -> FakeScandir:
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def __iter__(self) -> Iterator[FakeEntry]:
+            return iter((FakeEntry("first"), FakeEntry("second"), FakeEntry("ACTIVE")))
+
+    state = tmp_path / "state"
+    state.mkdir()
+    monkeypatch.setattr(maintenance_module, "_MAX_FENCE_DIRECTORY_ENTRIES", 2)
+    monkeypatch.setattr(os, "scandir", lambda _descriptor: FakeScandir())
+
+    with pytest.raises(MaintenanceIntegrityError) as raised:
+        maintenance_module._require_exact_fence_entry_name(
+            0,
+            "ACTIVE",
+            state,
+            label="quarantine ACTIVE marker",
+        )
+
+    assert raised.value.reason is MaintenanceIntegrityReason.QUARANTINE_FENCE_INVALID
+    assert "inspection limit" in raised.value.detail
+
+
 @pytest.mark.parametrize("invalid_shape", ["ancestor_symlink", "marker_symlink", "marker_hardlink"])
 def test_invalid_quarantine_fence_namespace_is_an_integrity_denial(
     tmp_path: Path,
@@ -442,3 +523,260 @@ def test_invalid_quarantine_fence_namespace_is_an_integrity_denial(
         MaintenanceLease.acquire_shared(state)
 
     assert raised.value.reason is MaintenanceIntegrityReason.QUARANTINE_FENCE_INVALID
+
+
+def test_verified_state_descriptor_duplicates_identity_and_closes_on_exit(
+    tmp_path: Path,
+) -> None:
+    state = tmp_path / "state"
+    state.mkdir()
+    lease = MaintenanceLease.acquire_shared(state)
+    borrowed_descriptor = -1
+    try:
+        with lease.verified_state_descriptor() as descriptor:
+            borrowed_descriptor = descriptor
+            assert descriptor != lease._held.state_descriptor
+            borrowed = os.fstat(descriptor)
+            held = os.fstat(lease._held.state_descriptor)
+            assert stat.S_ISDIR(borrowed.st_mode)
+            assert (borrowed.st_dev, borrowed.st_ino) == (held.st_dev, held.st_ino)
+            assert (
+                os.stat(
+                    MAINTENANCE_LOCK_FILENAME,
+                    dir_fd=descriptor,
+                    follow_symlinks=False,
+                ).st_ino
+                == os.lstat(state / MAINTENANCE_LOCK_FILENAME).st_ino
+            )
+
+        with pytest.raises(OSError) as raised:
+            os.fstat(borrowed_descriptor)
+        assert raised.value.errno == errno.EBADF
+        assert stat.S_ISDIR(os.fstat(lease._held.state_descriptor).st_mode)
+    finally:
+        lease.close()
+
+
+def test_verified_state_descriptor_requires_exclusive_mode_when_requested(
+    tmp_path: Path,
+) -> None:
+    state = tmp_path / "state"
+    state.mkdir()
+
+    with (
+        MaintenanceLease.acquire_shared(state) as lease,
+        pytest.raises(MaintenanceIntegrityError) as raised,
+        lease.verified_state_descriptor(require_exclusive=True),
+    ):
+        pytest.fail("shared lease must not lend an exclusive maintenance descriptor")
+    assert raised.value.reason is MaintenanceIntegrityReason.LEASE_MODE_REQUIRED
+
+    with (
+        MaintenanceLease.acquire_exclusive(state) as lease,
+        lease.verified_state_descriptor(require_exclusive=True) as descriptor,
+    ):
+        assert stat.S_ISDIR(os.fstat(descriptor).st_mode)
+
+
+def test_verified_state_descriptor_rejects_wrong_process_ownership(
+    tmp_path: Path,
+) -> None:
+    state = tmp_path / "state"
+    state.mkdir()
+    lease = MaintenanceLease.acquire_exclusive(state)
+    owner_pid = lease._held.owner_pid
+    lease._held.owner_pid = owner_pid + 1
+    try:
+        with (
+            pytest.raises(MaintenanceIntegrityError) as raised,
+            lease.verified_state_descriptor(require_exclusive=True),
+        ):
+            pytest.fail("another process's lease descriptor must not be borrowed")
+        assert raised.value.reason is MaintenanceIntegrityReason.PROCESS_CHANGED
+    finally:
+        lease._held.owner_pid = owner_pid
+        lease.close()
+
+
+def test_verified_state_descriptor_rejects_wrong_registry_ownership(
+    tmp_path: Path,
+) -> None:
+    state = tmp_path / "state"
+    state.mkdir()
+    lease = MaintenanceLease.acquire_exclusive(state)
+    held = lease._held
+    del maintenance_module._registry[held.state_directory]
+    try:
+        with (
+            pytest.raises(MaintenanceIntegrityError) as raised,
+            lease.verified_state_descriptor(require_exclusive=True),
+        ):
+            pytest.fail("an unregistered lease descriptor must not be borrowed")
+        assert raised.value.reason is MaintenanceIntegrityReason.STATE_CHANGED
+    finally:
+        maintenance_module._registry[held.state_directory] = held
+        lease.close()
+
+
+def test_verified_state_descriptor_closes_duplicate_when_body_raises(
+    tmp_path: Path,
+) -> None:
+    state = tmp_path / "state"
+    state.mkdir()
+    lease = MaintenanceLease.acquire_exclusive(state)
+    borrowed_descriptor = -1
+    try:
+        with (
+            pytest.raises(RuntimeError, match="injected descriptor body failure"),
+            lease.verified_state_descriptor(require_exclusive=True) as descriptor,
+        ):
+            borrowed_descriptor = descriptor
+            raise RuntimeError("injected descriptor body failure")
+
+        with pytest.raises(OSError) as raised:
+            os.fstat(borrowed_descriptor)
+        assert raised.value.errno == errno.EBADF
+    finally:
+        lease.close()
+
+
+def test_verified_state_descriptor_does_not_close_reused_descriptor_number(
+    tmp_path: Path,
+) -> None:
+    state = tmp_path / "state"
+    state.mkdir()
+    collateral = tmp_path / "collateral"
+    collateral.write_bytes(b"must remain open")
+    collateral_source = os.open(collateral, os.O_RDONLY)
+    lease = MaintenanceLease.acquire_exclusive(state)
+    reused_descriptor = -1
+    try:
+        with (
+            pytest.raises(MaintenanceIntegrityError) as raised,
+            lease.verified_state_descriptor(require_exclusive=True) as descriptor,
+        ):
+            os.close(descriptor)
+            _reuse_descriptor_from_thread(collateral_source, descriptor)
+            reused_descriptor = descriptor
+
+        assert raised.value.reason is MaintenanceIntegrityReason.STATE_CHANGED
+        assert os.fstat(reused_descriptor).st_ino == os.fstat(collateral_source).st_ino
+        assert os.read(reused_descriptor, 4) == b"must"
+    finally:
+        if reused_descriptor >= 0:
+            os.close(reused_descriptor)
+        os.close(collateral_source)
+        lease.close()
+
+
+def test_verified_state_descriptor_preserves_body_error_after_descriptor_reuse(
+    tmp_path: Path,
+) -> None:
+    state = tmp_path / "state"
+    state.mkdir()
+    collateral = tmp_path / "collateral"
+    collateral.write_bytes(b"must remain open")
+    collateral_source = os.open(collateral, os.O_RDONLY)
+    lease = MaintenanceLease.acquire_exclusive(state)
+    reused_descriptor = -1
+    try:
+        with (
+            pytest.raises(RuntimeError, match="injected body failure") as raised,
+            lease.verified_state_descriptor(require_exclusive=True) as descriptor,
+        ):
+            os.close(descriptor)
+            _reuse_descriptor_from_thread(collateral_source, descriptor)
+            reused_descriptor = descriptor
+            raise RuntimeError("injected body failure")
+
+        assert any(
+            "borrowed state-directory descriptor release also failed" in note
+            for note in raised.value.__notes__
+        )
+        assert os.fstat(reused_descriptor).st_ino == os.fstat(collateral_source).st_ino
+    finally:
+        if reused_descriptor >= 0:
+            os.close(reused_descriptor)
+        os.close(collateral_source)
+        lease.close()
+
+
+def test_verified_state_descriptor_keeps_owning_lease_open_until_context_exit(
+    tmp_path: Path,
+) -> None:
+    state = tmp_path / "state"
+    state.mkdir()
+    lease = MaintenanceLease.acquire_exclusive(state)
+    with lease.verified_state_descriptor(require_exclusive=True):
+        with pytest.raises(MaintenanceIntegrityError) as raised:
+            lease.close()
+        assert raised.value.reason is MaintenanceIntegrityReason.LEASE_DESCRIPTOR_BORROWED
+
+        competing_descriptor = os.open(state / MAINTENANCE_LOCK_FILENAME, os.O_RDWR)
+        try:
+            with pytest.raises(BlockingIOError):
+                fcntl.flock(competing_descriptor, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        finally:
+            os.close(competing_descriptor)
+
+    lease.close()
+    with MaintenanceLease.acquire_shared(state):
+        pass
+
+
+def test_verified_state_descriptor_closes_duplicate_after_validation_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state = tmp_path / "state"
+    state.mkdir()
+    lease = MaintenanceLease.acquire_exclusive(state)
+    real_dup = os.dup
+    real_require_identity = maintenance_module._require_state_path_identity
+    duplicated: list[int] = []
+    identity_checks = 0
+
+    def recording_dup(descriptor: int) -> int:
+        duplicate = real_dup(descriptor)
+        duplicated.append(duplicate)
+        return duplicate
+
+    def fail_after_duplication(
+        path: Path,
+        expected: maintenance_module._FileIdentity,
+    ) -> None:
+        nonlocal identity_checks
+        identity_checks += 1
+        if identity_checks == 2:
+            raise MaintenanceIntegrityError(
+                MaintenanceIntegrityReason.STATE_CHANGED,
+                state_directory=path,
+                detail="injected post-duplication identity failure",
+            )
+        real_require_identity(path, expected)
+
+    monkeypatch.setattr(os, "dup", recording_dup)
+    monkeypatch.setattr(
+        maintenance_module,
+        "_require_state_path_identity",
+        fail_after_duplication,
+    )
+    try:
+        with (
+            pytest.raises(MaintenanceIntegrityError) as raised,
+            lease.verified_state_descriptor(require_exclusive=True),
+        ):
+            pytest.fail("failed descriptor validation must not enter its body")
+        assert raised.value.reason is MaintenanceIntegrityReason.STATE_CHANGED
+        assert len(duplicated) >= 2
+        for descriptor in set(duplicated):
+            with pytest.raises(OSError) as closed:
+                os.fstat(descriptor)
+            assert closed.value.errno == errno.EBADF
+    finally:
+        monkeypatch.setattr(
+            maintenance_module,
+            "_require_state_path_identity",
+            real_require_identity,
+        )
+        lease.close()

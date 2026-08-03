@@ -175,3 +175,31 @@ quarantine plan/receipts/completion records, no-replace moves, restart reconcili
 and quarantine kill matrix remain to be implemented. The complete CAS publication kill
 matrix, concurrent/open-process stress, rootless x86_64 repetition, real-provider
 behavior, and the 99% normal-fixture campaign also remain open.
+
+## 2026-08-03 quarantine integration follow-up
+
+The subsequent [resumable quarantine checkpoint](../2026-08-03-resumable-quarantine/README.md)
+now consumes this lease in exclusive mode. `MaintenanceLease.verified_state_descriptor()`
+lends a revalidated duplicate of the already-open state directory for descriptor-relative
+maintenance while preventing lease release until that borrow ends. The duplicate is
+tracked process-wide so the at-fork child reset closes it; context exit verifies that the
+number still names the state directory before closing it, so caller misuse cannot close
+an unrelated file that reused the same descriptor number. Shared-mode borrows repeat the
+ACTIVE-fence check, while quarantine explicitly requires exclusive mode.
+
+Adversarial testing of that bridge reproduced and closed four false-safe implementation
+cases before quarantine integration:
+
+- an oversized Python descriptor could truncate through `ctypes.c_int` and alias a real
+  descriptor;
+- a borrowed duplicate could survive a direct `fork()` and prolong access in the child;
+- case-folded `QUARANTINE`, `V1`, or `active` aliases could pass a pathname-only marker
+  check on a case-insensitive filesystem; and
+- closing and reusing the yielded descriptor number could make context cleanup close an
+  unrelated file or hide the caller's primary exception.
+
+Descriptor integers are now bounded to the C ABI range, borrowed descriptors participate
+in at-fork cleanup, every fence component is found by an exact descriptor-relative
+bounded scan, and release preserves a primary body exception while reporting borrow
+misuse. These are local cooperative controls. The quarantine process-kill/concurrency
+matrix, hostile same-UID races, power loss, and reference-host validation remain open.

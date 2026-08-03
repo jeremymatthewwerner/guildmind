@@ -21,6 +21,7 @@ from guildmind.storage import (
     MaintenanceIntegrityReason,
     MaintenanceLease,
     VerifiedRunRoot,
+    audit_storage,
 )
 
 _REPOSITORY_ROOT = Path(__file__).parents[2]
@@ -216,6 +217,117 @@ def test_recover_command_reports_postcommit_maintenance_failure_with_durable_res
         trusted_base=state_directory.parent,
     ) as event_store:
         assert event_store.load_manifest(run_id).status.value == "succeeded"
+
+
+def test_quarantine_command_emits_the_authoritative_success_result(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    state_directory = tmp_path / "state"
+    state_directory.mkdir()
+    with EventStore(state_directory / "runs.db"):
+        pass
+
+    exit_code = main(["quarantine", "--state-dir", str(state_directory)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert captured.err == ""
+    assert json.loads(captured.out) == {
+        "completion_sha256": None,
+        "final_report": audit_storage(state_directory).model_dump(mode="json"),
+        "outcome": "no_op",
+        "quarantined_count": 0,
+        "resumed": False,
+        "schema_version": "guildmind.quarantine-result/v1",
+        "transaction_id": None,
+    }
+
+
+def test_quarantine_command_emits_stable_no_authority_denial_without_moves(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    state_directory = tmp_path / "state"
+    state_directory.mkdir()
+
+    exit_code = main(["quarantine", "--state-dir", str(state_directory)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.err == ""
+    assert json.loads(captured.out) == {
+        "error": "quarantine_denied",
+        "reason": "storage_not_quarantinable",
+        "schema_version": "guildmind.quarantine-denial/v1",
+    }
+    assert not (state_directory / "quarantine").exists()
+
+
+def test_quarantine_command_emits_stable_fenced_incomplete_failure(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    state_directory = tmp_path / "state"
+    state_directory.mkdir()
+    with EventStore(state_directory / "runs.db"):
+        pass
+    version = state_directory / "quarantine" / "v1"
+    (version / "transactions").mkdir(parents=True)
+    active = version / "ACTIVE"
+    active.write_bytes(b"{}")
+
+    exit_code = main(["quarantine", "--state-dir", str(state_directory)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.err == ""
+    assert json.loads(captured.out) == {
+        "error": "quarantine_incomplete",
+        "reason": "record_invalid",
+        "schema_version": "guildmind.quarantine-incomplete/v1",
+        "transaction_id": None,
+    }
+    assert active.read_bytes() == b"{}"
+
+
+def test_quarantine_command_reports_finalization_failure_with_authoritative_result(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_directory = tmp_path / "state"
+    state_directory.mkdir()
+    with EventStore(state_directory / "runs.db"):
+        pass
+    real_close = MaintenanceLease.close
+
+    def close_then_report_integrity_failure(lease: MaintenanceLease) -> None:
+        real_close(lease)
+        raise MaintenanceIntegrityError(
+            MaintenanceIntegrityReason.LOCK_CHANGED,
+            state_directory=state_directory,
+            detail="injected quarantine CLI release-time identity failure",
+        )
+
+    monkeypatch.setattr(MaintenanceLease, "close", close_then_report_integrity_failure)
+
+    exit_code = main(["quarantine", "--state-dir", str(state_directory)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.err == ""
+    response = json.loads(captured.out)
+    assert response == {
+        "completion_sha256": None,
+        "error": "quarantine_finalization_failed",
+        "final_report": audit_storage(state_directory).model_dump(mode="json"),
+        "outcome": "no_op",
+        "quarantined_count": 0,
+        "resumed": False,
+        "schema_version": "guildmind.quarantine-finalization-failure/v1",
+        "transaction_id": None,
+    }
 
 
 def test_recover_command_absent_state_returns_stable_denial_without_creation(

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import errno
 import fcntl
 import multiprocessing
 import os
 import signal
+import stat
 import threading
 from contextlib import suppress
 from multiprocessing.connection import Connection, wait
@@ -292,4 +294,93 @@ def test_inherited_lease_object_cannot_enter_in_fork_child(tmp_path: Path) -> No
         lease.close()
 
     with MaintenanceLease.acquire_exclusive(state):
+        pass
+
+
+def test_fork_child_cannot_use_inherited_borrowed_state_descriptor(
+    tmp_path: Path,
+) -> None:
+    state = tmp_path / "state"
+    state.mkdir()
+    lease = MaintenanceLease.acquire_exclusive(state)
+    read_descriptor, write_descriptor = os.pipe()
+    child_pid: int | None = None
+    child_results: list[str] = []
+    try:
+        try:
+            with lease.verified_state_descriptor(require_exclusive=True) as descriptor:
+                child_pid = os.fork()
+                if child_pid == 0:
+                    os.close(read_descriptor)
+                    try:
+                        os.fstat(descriptor)
+                    except OSError as error:
+                        child_results.append(f"fstat:{error.errno}")
+                    else:
+                        child_results.append("fstat:open")
+
+                    try:
+                        created = os.open(
+                            "child-created",
+                            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                            0o600,
+                            dir_fd=descriptor,
+                        )
+                    except OSError as error:
+                        child_results.append(f"openat:{error.errno}")
+                    else:
+                        os.close(created)
+                        child_results.append("openat:open")
+                else:
+                    os.close(write_descriptor)
+                    write_descriptor = -1
+                    assert stat.S_ISDIR(os.fstat(descriptor).st_mode)
+                    created = os.open(
+                        "parent-created",
+                        os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                        0o600,
+                        dir_fd=descriptor,
+                    )
+                    os.close(created)
+
+            if child_pid == 0:
+                os.write(write_descriptor, ",".join(child_results).encode("ascii"))
+                os.close(write_descriptor)
+                os._exit(0)
+        except BaseException as error:
+            if child_pid == 0:
+                with suppress(OSError):
+                    os.write(
+                        write_descriptor,
+                        f"context:{type(error).__name__}".encode("ascii"),
+                    )
+                os._exit(2)
+            raise
+
+        assert child_pid is not None
+        _, status = os.waitpid(child_pid, 0)
+        child_pid = None
+        child_message = os.read(read_descriptor, 128).decode("ascii")
+        assert os.WIFEXITED(status)
+        assert os.WEXITSTATUS(status) == 0
+        assert child_message == f"fstat:{errno.EBADF},openat:{errno.EBADF}"
+        assert not (state / "child-created").exists()
+        assert (state / "parent-created").is_file()
+
+        with lease.verified_state_descriptor(require_exclusive=True) as descriptor:
+            assert stat.S_ISDIR(os.fstat(descriptor).st_mode)
+    finally:
+        with suppress(OSError):
+            os.close(read_descriptor)
+        if write_descriptor >= 0:
+            with suppress(OSError):
+                os.close(write_descriptor)
+        if child_pid is not None:
+            with suppress(ProcessLookupError):
+                os.kill(child_pid, signal.SIGKILL)
+            with suppress(ChildProcessError):
+                os.waitpid(child_pid, 0)
+        lease.close()
+
+    with MaintenanceLease.acquire_shared(state):
         pass

@@ -37,7 +37,14 @@ from guildmind.sandbox import (
     run_resource_probe_suite,
     run_sandbox_self_test,
 )
-from guildmind.storage import EventStore, StoreIntegrityError
+from guildmind.storage import (
+    EventStore,
+    QuarantineDeniedError,
+    QuarantineFinalizationError,
+    QuarantineIncompleteError,
+    StoreIntegrityError,
+    quarantine_orphans,
+)
 
 _INSPECTION_DENIAL_SCHEMA_VERSION = "guildmind.inspection-denial/v1"
 
@@ -158,6 +165,18 @@ def _build_parser() -> argparse.ArgumentParser:
     recover.add_argument("run_id")
     recover.add_argument("--state-dir", type=Path, default=Path(".guildmind"))
     recover.set_defaults(handler=_recover)
+
+    quarantine = subcommands.add_parser(
+        "quarantine",
+        help="quarantine authorized ownerless artifacts with resumable evidence",
+    )
+    quarantine.add_argument(
+        "--state-dir",
+        type=Path,
+        required=True,
+        help="existing Guildmind state directory to maintain",
+    )
+    quarantine.set_defaults(handler=_quarantine)
 
     report = subcommands.add_parser("report", help="print a stored run summary")
     report.add_argument("run_id")
@@ -540,6 +559,42 @@ def _recover(arguments: argparse.Namespace) -> int:
             "terminal_reason": manifest.terminal_reason,
         }
     )
+    return 0
+
+
+def _quarantine(arguments: argparse.Namespace) -> int:
+    try:
+        result = quarantine_orphans(arguments.state_dir)
+    except QuarantineDeniedError as error:
+        _print_json(
+            {
+                "error": "quarantine_denied",
+                "reason": error.reason.value,
+                "schema_version": "guildmind.quarantine-denial/v1",
+            }
+        )
+        return 1
+    except QuarantineIncompleteError as error:
+        _print_json(
+            {
+                "error": "quarantine_incomplete",
+                "reason": error.reason.value,
+                "schema_version": "guildmind.quarantine-incomplete/v1",
+                "transaction_id": error.transaction_id,
+            }
+        )
+        return 1
+    except QuarantineFinalizationError as error:
+        response = error.result.model_dump(mode="json")
+        response.update(
+            {
+                "error": "quarantine_finalization_failed",
+                "schema_version": "guildmind.quarantine-finalization-failure/v1",
+            }
+        )
+        _print_json(response)
+        return 1
+    _print_json(result.model_dump(mode="json"))
     return 0
 
 

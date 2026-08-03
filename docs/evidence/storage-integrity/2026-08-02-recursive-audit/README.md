@@ -190,3 +190,21 @@ That integration does not move the orphans classified here and does not remove t
 document's quiescent same-UID boundary. Resumable quarantine, CAS publication kill
 points, concurrency stress, provider behavior, reference-host repetition, and the 99%
 normal-fixture campaign remain open; Stage 1 is still **NOT PASSED**.
+
+## 2026-08-03 resumable quarantine follow-up
+
+The later [resumable quarantine checkpoint](../2026-08-03-resumable-quarantine/README.md)
+now consumes the top-level `quarantine_allowed` observation correctly: the public entry
+point accepts only a state path, acquires exclusive maintenance, and obtains a new report
+itself. It denies the whole operation unless every finding is one of the three authorized
+ownerless regular-file classes, then repeats the audit after hashing candidates. It binds
+the full report and candidate identities into immutable content-addressed records before
+publishing ACTIVE or moving a source.
+
+Candidate moves use descriptor-relative same-filesystem atomic no-replace rename and
+directory-sync ordering. Restart revalidates the original ledger/reachable commitment,
+requires every planned file at exactly its source or destination, and can repair the
+post-rename/pre-receipt window. The implementation includes deterministic interruption
+regressions, not yet the complete spawned-process `SIGKILL`/concurrency matrix. The
+same-UID, power-loss, remaining CAS, provider, reference-host, and 99% campaign limits
+therefore remain, and Stage 1 is still **NOT PASSED**.

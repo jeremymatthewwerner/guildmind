@@ -21,7 +21,8 @@ import fcntl
 import os
 import stat
 import threading
-from contextlib import suppress
+from collections.abc import Iterator
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -39,6 +40,7 @@ _DIRECTORY_FLAGS = (
 )
 _LOCK_OPEN_FLAGS = os.O_RDWR | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
 _MARKER_OPEN_FLAGS = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+_MAX_FENCE_DIRECTORY_ENTRIES = 65_536
 
 
 class MaintenanceLeaseMode(StrEnum):
@@ -65,6 +67,8 @@ class MaintenanceIntegrityReason(StrEnum):
     QUARANTINE_FENCE_INVALID = "quarantine_fence_invalid"
     LOCK_OPERATION_FAILED = "lock_operation_failed"
     PROCESS_CHANGED = "process_changed"
+    LEASE_MODE_REQUIRED = "lease_mode_required"
+    LEASE_DESCRIPTOR_BORROWED = "lease_descriptor_borrowed"
     LEASE_ALREADY_ENTERED = "lease_already_entered"
     LEASE_RELEASED = "lease_released"
 
@@ -126,6 +130,7 @@ class _HeldLease:
 _registry_lock = threading.RLock()
 _registry_pid = os.getpid()
 _registry: dict[Path, _HeldLease] = {}
+_borrowed_descriptors: set[int] = set()
 
 
 class MaintenanceLease:
@@ -138,6 +143,7 @@ class MaintenanceLease:
         # existing caller's shared reference from ``__del__``.
         self._released = True
         self._entered = False
+        self._descriptor_borrows = 0
 
     @classmethod
     def acquire_shared(cls, state_directory: Path) -> Self:
@@ -150,6 +156,149 @@ class MaintenanceLease:
         """Acquire a nonblocking exclusive maintenance lease."""
 
         return cls._acquire(state_directory, mode=MaintenanceLeaseMode.EXCLUSIVE)
+
+    @contextmanager
+    def verified_state_descriptor(
+        self,
+        *,
+        require_exclusive: bool = False,
+    ) -> Iterator[int]:
+        """Yield a verified duplicate of this lease's open state-directory FD.
+
+        The duplicate is suitable for descriptor-relative maintenance operations. The
+        lease must still belong to this process and occupy its original registry entry;
+        its state and lock identities are revalidated before duplication. Callers may
+        additionally require exclusive mode. The yielded descriptor is always closed
+        when the context exits and must not be retained or closed by the caller.
+        """
+
+        _reset_registry_after_fork()
+        duplicate = -1
+        with _registry_lock:
+            _reset_registry_after_fork()
+            held = self._held
+            if self._released:
+                raise MaintenanceIntegrityError(
+                    MaintenanceIntegrityReason.LEASE_RELEASED,
+                    state_directory=held.state_directory,
+                    detail="a released maintenance lease cannot lend its state descriptor",
+                )
+            if held.owner_pid != os.getpid():
+                raise MaintenanceIntegrityError(
+                    MaintenanceIntegrityReason.PROCESS_CHANGED,
+                    state_directory=held.state_directory,
+                    detail="a lease cannot lend its state descriptor to another process",
+                )
+            if _registry.get(held.state_directory) is not held:
+                raise MaintenanceIntegrityError(
+                    MaintenanceIntegrityReason.STATE_CHANGED,
+                    state_directory=held.state_directory,
+                    detail="the process-local lease registration changed before descriptor use",
+                )
+            if require_exclusive and held.mode is not MaintenanceLeaseMode.EXCLUSIVE:
+                raise MaintenanceIntegrityError(
+                    MaintenanceIntegrityReason.LEASE_MODE_REQUIRED,
+                    state_directory=held.state_directory,
+                    detail="this state-directory operation requires an exclusive maintenance lease",
+                )
+            try:
+                _verify_held_lease(held)
+                marker_present = _quarantine_marker_present(held)
+                if held.mode is MaintenanceLeaseMode.SHARED and marker_present:
+                    raise MaintenanceIntegrityError(
+                        MaintenanceIntegrityReason.STATE_CHANGED,
+                        state_directory=held.state_directory,
+                        detail="quarantine became active before state-descriptor use",
+                    )
+                duplicate = os.dup(held.state_descriptor)
+                duplicate_identity = _identity(os.fstat(duplicate))
+                if not stat.S_ISDIR(duplicate_identity.file_type) or not _same_object(
+                    duplicate_identity,
+                    held.state_identity,
+                ):
+                    raise MaintenanceIntegrityError(
+                        MaintenanceIntegrityReason.STATE_CHANGED,
+                        state_directory=held.state_directory,
+                        detail="duplicated state-directory descriptor changed identity",
+                    )
+                _require_state_path_identity(held.state_directory, held.state_identity)
+                _borrowed_descriptors.add(duplicate)
+                self._descriptor_borrows += 1
+            except BaseException as error:
+                close_error = _close_descriptors(duplicate) if duplicate >= 0 else None
+                if close_error is not None:
+                    close_failure = _integrity_error(
+                        MaintenanceIntegrityReason.LOCK_OPERATION_FAILED,
+                        held.state_directory,
+                        "duplicated state-directory descriptor could not be closed "
+                        "after validation",
+                        close_error,
+                    )
+                    close_failure.add_note(f"descriptor validation also failed: {error!r}")
+                    raise close_failure from close_error
+                if isinstance(error, OSError):
+                    raise _integrity_error(
+                        MaintenanceIntegrityReason.LOCK_OPERATION_FAILED,
+                        held.state_directory,
+                        "state-directory descriptor could not be duplicated safely",
+                        error,
+                    ) from error
+                raise
+
+        operation_error: BaseException | None = None
+        try:
+            yield duplicate
+        except BaseException as error:
+            operation_error = error
+            raise
+        finally:
+            borrow_release_failure: MaintenanceIntegrityError | None = None
+            with _registry_lock:
+                _reset_registry_after_fork()
+                if duplicate in _borrowed_descriptors:
+                    try:
+                        duplicate_identity = _identity(os.fstat(duplicate))
+                    except OSError as error:
+                        borrow_release_failure = _integrity_error(
+                            MaintenanceIntegrityReason.STATE_CHANGED,
+                            held.state_directory,
+                            "borrowed state-directory descriptor was closed or replaced "
+                            "by its caller",
+                            error,
+                        )
+                    else:
+                        if not stat.S_ISDIR(duplicate_identity.file_type) or not _same_object(
+                            duplicate_identity,
+                            held.state_identity,
+                        ):
+                            borrow_release_failure = MaintenanceIntegrityError(
+                                MaintenanceIntegrityReason.STATE_CHANGED,
+                                state_directory=held.state_directory,
+                                detail=(
+                                    "borrowed state-directory descriptor was replaced by "
+                                    "another open file; the replacement was left open"
+                                ),
+                            )
+                        else:
+                            try:
+                                os.close(duplicate)
+                            except OSError as error:
+                                borrow_release_failure = _integrity_error(
+                                    MaintenanceIntegrityReason.LOCK_OPERATION_FAILED,
+                                    held.state_directory,
+                                    "borrowed state-directory descriptor could not be closed",
+                                    error,
+                                )
+                    finally:
+                        _borrowed_descriptors.remove(duplicate)
+                self._descriptor_borrows -= 1
+            if borrow_release_failure is not None:
+                if operation_error is None:
+                    raise borrow_release_failure
+                operation_error.add_note(
+                    "borrowed state-directory descriptor release also failed: "
+                    f"{borrow_release_failure!r}"
+                )
 
     @classmethod
     def _acquire(cls, configured_state: Path, *, mode: MaintenanceLeaseMode) -> Self:
@@ -364,6 +513,12 @@ class MaintenanceLease:
         with _registry_lock:
             _reset_registry_after_fork()
             held = self._held
+            if held.owner_pid == os.getpid() and self._descriptor_borrows:
+                raise MaintenanceIntegrityError(
+                    MaintenanceIntegrityReason.LEASE_DESCRIPTOR_BORROWED,
+                    state_directory=held.state_directory,
+                    detail="a maintenance lease cannot close while lending a state descriptor",
+                )
             self._released = True
             if held.owner_pid != os.getpid():
                 raise MaintenanceIntegrityError(
@@ -621,6 +776,12 @@ def _quarantine_marker_present(held: _HeldLease) -> bool:
                     "quarantine fence namespace could not be inspected",
                     error,
                 ) from error
+            _require_exact_fence_entry_name(
+                current_descriptor,
+                component,
+                held.state_directory,
+                label="quarantine fence ancestor",
+            )
             path_identity = _identity(path_metadata)
             if not stat.S_ISDIR(path_metadata.st_mode):
                 raise MaintenanceIntegrityError(
@@ -653,6 +814,12 @@ def _quarantine_marker_present(held: _HeldLease) -> bool:
                         state_directory=held.state_directory,
                         detail="quarantine fence ancestor changed during inspection",
                     )
+                _require_exact_fence_entry_name(
+                    current_descriptor,
+                    component,
+                    held.state_directory,
+                    label="quarantine fence ancestor",
+                )
             except BaseException:
                 os.close(next_descriptor)
                 raise
@@ -675,6 +842,12 @@ def _quarantine_marker_present(held: _HeldLease) -> bool:
                 "quarantine ACTIVE marker could not be inspected",
                 error,
             ) from error
+        _require_exact_fence_entry_name(
+            current_descriptor,
+            marker_name,
+            held.state_directory,
+            label="quarantine ACTIVE marker",
+        )
         marker_identity = _identity(marker_metadata)
         _require_regular_single_link(
             marker_identity,
@@ -711,11 +884,52 @@ def _quarantine_marker_present(held: _HeldLease) -> bool:
                     state_directory=held.state_directory,
                     detail="quarantine ACTIVE marker changed during inspection",
                 )
+            _require_exact_fence_entry_name(
+                current_descriptor,
+                marker_name,
+                held.state_directory,
+                label="quarantine ACTIVE marker",
+            )
         finally:
             os.close(marker_descriptor)
         return True
     finally:
         os.close(current_descriptor)
+
+
+def _require_exact_fence_entry_name(
+    directory_descriptor: int,
+    expected_name: str,
+    state: Path,
+    *,
+    label: str,
+) -> None:
+    try:
+        with os.scandir(directory_descriptor) as entries:
+            for position, entry in enumerate(entries, start=1):
+                if position > _MAX_FENCE_DIRECTORY_ENTRIES:
+                    raise MaintenanceIntegrityError(
+                        MaintenanceIntegrityReason.QUARANTINE_FENCE_INVALID,
+                        state_directory=state,
+                        detail=(
+                            f"{label} parent exceeds the inspection limit of "
+                            f"{_MAX_FENCE_DIRECTORY_ENTRIES} entries"
+                        ),
+                    )
+                if entry.name == expected_name:
+                    return
+    except OSError as error:
+        raise _integrity_error(
+            MaintenanceIntegrityReason.QUARANTINE_FENCE_INVALID,
+            state,
+            f"{label} name could not be inspected descriptor-relatively",
+            error,
+        ) from error
+    raise MaintenanceIntegrityError(
+        MaintenanceIntegrityReason.QUARANTINE_FENCE_INVALID,
+        state_directory=state,
+        detail=f"{label} does not use exact canonical spelling {expected_name!r}",
+    )
 
 
 def _require_state_path_identity(state: Path, expected: _FileIdentity) -> None:
@@ -834,14 +1048,19 @@ def _reset_registry_after_fork() -> None:
 
 
 def _reset_registry_in_child() -> None:
-    global _registry, _registry_lock, _registry_pid
+    global _borrowed_descriptors, _registry, _registry_lock, _registry_pid
     inherited = tuple(_registry.values())
+    inherited_borrows = tuple(_borrowed_descriptors)
     # A lock owned by another parent thread remains permanently owned in the child.
     # Replace it without acquiring it, then close the child's copies of lease FDs so
     # they cannot prolong the parent's kernel lease after an abrupt parent exit.
     _registry_lock = threading.RLock()
     _registry = {}
+    _borrowed_descriptors = set()
     _registry_pid = os.getpid()
+    for descriptor in inherited_borrows:
+        with suppress(OSError):
+            os.close(descriptor)
     for held in inherited:
         # Do not issue LOCK_UN: the inherited open-file description is also owned by
         # the parent. Closing only the child's copies leaves the parent's lease intact.

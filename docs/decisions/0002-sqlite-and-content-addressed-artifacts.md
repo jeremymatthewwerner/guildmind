@@ -33,7 +33,11 @@ Content hashes prove identity, not authorship. Stage approvals and lockbox acces
 
 ## Recovery and scaling
 
-Startup verifies migration state, SQLite integrity, run-state transitions, artifact references, and digest/length metadata. Orphan temporary files and unreferenced finalized blobs are reported and quarantined; recovery never invents an event or free spend.
+Startup and explicit recovery verify migration state, SQLite integrity, run-state
+transitions, artifact references, and digest/length metadata. Orphan temporary files and
+unreferenced finalized blobs are reported by the read-only audit. Quarantine is an
+explicit maintenance action rather than an automatic startup side effect; recovery never
+invents an event or free spend.
 
 Move to PostgreSQL/object storage only when measured concurrent worker demand requires distributed leases or the local durability/throughput envelope is insufficient. That migration requires a new ADR and evidence-preserving import checks.
 
@@ -59,7 +63,28 @@ The [atomic no-replace publication checkpoint](../evidence/crash-recovery/2026-0
 
 The [cooperative maintenance-lease checkpoint](../evidence/storage-integrity/2026-08-03-maintenance-lease/README.md) adds one persistent state-local single-link lock opened and created without following its leaf. Fixture publication holds a shared nonblocking `flock` from before its first CAS write through the final SQLite bind. Guarded recovery and budget terminalization hold the same shared lease from before their fresh audit through final commit; nested same-process recovery safely reuses the shared kernel handle. Exclusive maintenance conflicts with either mode, and a valid `quarantine/v1/ACTIVE` marker blocks shared mutation. A missing, non-directory, or symlinked state leaf remains no-create. Any existing real state directory with a usable lock path—including empty or damaged storage, an unknown run, or an ACTIVE fence—may gain and synchronize the persistent lock before later classification or denial. Spawned-process tests cover shared coexistence, exclusive exclusion, inherited-fork cleanup, abrupt parent exit, and kernel release after `SIGKILL`.
 
-This implements the cooperative maintenance window for supported high-level paths, but it is not a same-UID hostile-process security boundary. Direct low-level store users must participate explicitly, and a hostile co-tenant can ignore `flock` or race checked pathnames. Resumable quarantine, remaining CAS kill points, broader concurrent/open-process stress, power-loss testing, and reference-host repetition remain required before the startup and quarantine language in this ADR is fully satisfied.
+This implements the cooperative maintenance window for supported high-level paths, but
+it is not a same-UID hostile-process security boundary. Direct low-level store users must
+participate explicitly, and a hostile co-tenant can ignore `flock` or race checked
+pathnames.
+
+### 2026-08-03 resumable quarantine checkpoint
+
+The [resumable orphan-quarantine checkpoint](../evidence/storage-integrity/2026-08-03-resumable-quarantine/README.md)
+adds the explicit `guildmind quarantine --state-dir ...` maintenance action specified by
+[ADR 0005](0005-resumable-orphan-quarantine.md). It takes exclusive mode before obtaining
+its own fresh top-level audit and moves nothing unless the complete finding set contains
+only ownerless valid-finalized, corrupt-finalized, or temporary regular files. A
+content-addressed BEFORE/PLAN/ACTIVE record chain precedes any move. Candidate publication
+uses descriptor-relative atomic no-replace rename, syncs the destination and source
+directories, and writes deterministic receipts; AFTER/COMPLETE evidence precedes durable
+fence removal. Resume accepts exactly one of the planned source or destination and can
+repair the post-rename/pre-receipt window without overwriting or deleting either side.
+
+The implementation and in-process interruption/fault regressions establish this protocol
+surface, not the complete crash claim. The spawned-process quarantine `SIGKILL` matrix,
+broader cooperating-process/open-process stress, remaining CAS publication kill points,
+power-loss testing, and rootless x86_64 reference-host repetition remain required.
 
 ## Consequences
 
