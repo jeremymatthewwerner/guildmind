@@ -5,29 +5,40 @@ import re
 from pathlib import Path
 from typing import Never, cast
 
+import pytest
 from pydantic import JsonValue
 
 from guildmind.domain import canonical_sha256, sha256_bytes
 from guildmind.evaluation import ContainerEvaluatorResources, load_fixture, load_python_call_bundle
 
 _REPOSITORY_ROOT = Path(__file__).parents[2]
-_REPORT = (
-    _REPOSITORY_ROOT
-    / "docs"
-    / "evidence"
-    / "fixture-qualification"
-    / "2026-08-03-batch-001-development-container"
-    / "report.json"
-)
-_FIXTURES = (
-    "002-slug-normalization",
-    "003-interval-merge",
-    "004-json-pointer",
-    "005-stable-dedupe",
+_REPORT_ROOT = _REPOSITORY_ROOT / "docs" / "evidence" / "fixture-qualification"
+_REPORTS = (
+    (
+        "2026-08-03-batch-001-development-container/report.json",
+        "stage1-fixture-batch-001",
+        "c11d38b8372937191153ce4a87805f27b281f1d0",
+        (
+            "002-slug-normalization",
+            "003-interval-merge",
+            "004-json-pointer",
+            "005-stable-dedupe",
+        ),
+    ),
+    (
+        "2026-08-03-batch-002-development-container/report.json",
+        "stage1-fixture-batch-002",
+        "13d3b5ebf0dba0b585999e135bac15b5f0032d5d",
+        (
+            "006-run-decoder",
+            "007-apportionment",
+            "008-topological-order",
+            "009-ordered-changes",
+        ),
+    ),
 )
 _IMAGE_DIGEST = "31925a81fc6a21a82bcaf2370a6dfa20994a5427180fff8c0a3943d274e960d7"
 _IMAGE_REFERENCE = f"guildmind/evaluator@sha256:{_IMAGE_DIGEST}"
-_REVISION = "c11d38b8372937191153ce4a87805f27b281f1d0"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -44,9 +55,9 @@ def _object_from_pairs(pairs: list[tuple[str, JsonValue]]) -> dict[str, JsonValu
     return result
 
 
-def _load_report() -> dict[str, JsonValue]:
+def _load_report(path: Path) -> dict[str, JsonValue]:
     raw = json.loads(
-        _REPORT.read_bytes(),
+        path.read_bytes(),
         object_pairs_hook=_object_from_pairs,
         parse_constant=_reject_constant,
     )
@@ -80,8 +91,14 @@ def _assert_sha256(value: JsonValue) -> str:
     return digest
 
 
-def test_fixture_batch_container_report_is_self_bound_and_matches_sources() -> None:
-    report = _load_report()
+@pytest.mark.parametrize(("report_relative", "batch_id", "revision", "fixtures"), _REPORTS)
+def test_fixture_batch_container_report_is_self_bound_and_matches_sources(
+    report_relative: str,
+    batch_id: str,
+    revision: str,
+    fixtures: tuple[str, ...],
+) -> None:
+    report = _load_report(_REPORT_ROOT / report_relative)
     assert set(report) == {
         "batch_id",
         "evaluator_version",
@@ -103,25 +120,25 @@ def test_fixture_batch_container_report_is_self_bound_and_matches_sources() -> N
     del body["report_body_sha256"]
     assert canonical_sha256(body) == claimed_body_sha256
     assert report["schema_version"] == "guildmind.fixture-batch-container-qualification/v1"
-    assert report["batch_id"] == "stage1-fixture-batch-001"
+    assert report["batch_id"] == batch_id
     assert report["evidence_level"] == "development-container"
     assert report["evaluator_version"] == "guildmind/container-python-call-v2"
     assert report["image_reference"] == _IMAGE_REFERENCE
     assert report["recorded_on"] == "2026-08-03"
-    assert report["repository_revision"] == _REVISION
+    assert report["repository_revision"] == revision
     assert report["repository_tracked_clean"] is True
-    assert report["fixture_count"] == len(_FIXTURES)
+    assert report["fixture_count"] == len(fixtures)
     assert report["repetitions_per_outcome"] == 3
-    assert report["total_evaluations"] == len(_FIXTURES) * 2 * 3
+    assert report["total_evaluations"] == len(fixtures) * 2 * 3
     assert report["expected_outcomes"] == {
         "gold": "passed",
         "pristine_control": "tests_failed",
     }
 
     fixture_entries = _array(report["fixtures"])
-    assert len(fixture_entries) == len(_FIXTURES)
+    assert len(fixture_entries) == len(fixtures)
     resources = ContainerEvaluatorResources()
-    for fixture_name, raw_entry in zip(_FIXTURES, fixture_entries, strict=True):
+    for fixture_name, raw_entry in zip(fixtures, fixture_entries, strict=True):
         entry = _object(raw_entry)
         fixture_root = _REPOSITORY_ROOT / "fixtures" / fixture_name
         spec = load_fixture(fixture_root)

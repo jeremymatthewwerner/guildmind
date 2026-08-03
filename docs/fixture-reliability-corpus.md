@@ -22,11 +22,11 @@ batch-calibration campaign also reconciled every attempt as expected with zero
 infrastructure errors. Fixtures 001–005 are therefore development-qualified; they still
 require inclusion in the final frozen schedule and native rootless x86_64 reference-host
 repetition. Fixtures 006–009 now have committed directories and exact controls and have
-passed their three-repeat trusted-local pristine/gold gate; their two-phase development
-container matrix and separately frozen cumulative campaign remain pending. Rows 010–020
-remain a construction plan. Locally qualified or planned rows may not be counted in the
-final campaign denominator, and the five-attempt calibration may not be relabeled as the
-final Stage 1 denominator.
+passed both their three-repeat trusted-local pristine/gold gate and their three-repeat
+two-phase development-container gate. Their separately frozen cumulative campaign
+remains pending. Rows 010–020 remain a construction plan. Development-qualified or
+planned rows may not be counted in the final campaign denominator, and the five-attempt
+calibration may not be relabeled as the final Stage 1 denominator.
 
 ## Anti-duplication and acceptance rules
 
@@ -60,10 +60,10 @@ A fixture is eligible only if all of the following hold:
 | 003 | `merge_intervals(intervals)` | Ordering plus closed-integer interval coalescing | nested integer lists | unsorted containment, adjacency, negatives, empty input | Development-qualified; reference pending |
 | 004 | `resolve_pointer(document, pointer)` | Escaped-token traversal across maps and arrays | arbitrary nested JSON | RFC 6901 `~0`/`~1`, root pointer, empty key, list index | Development-qualified; reference pending |
 | 005 | `dedupe_by(records, key)` | Stable first-wins deduplication by structural JSON identity | list of objects | falsy, list-valued, and object-valued keys while preserving order | Development-qualified; reference pending |
-| 006 | `decode_runs(encoded)` | Stateful run-length parser with multi-digit counts | string → list/null | multi-digit runs, escaped literal separators, zero/invalid run policy | Locally qualified; development container pending |
-| 007 | `apportion(total, weights)` | Exact largest-remainder integer allocation and deterministic ties | integer + integer list | exact total, zero weights, index tie break, >53-bit values | Locally qualified; development container pending |
-| 008 | `topological_order(nodes, edges)` | Graph dependency resolution with stable ready-queue order | strings + edge pairs | disconnected graph, diamond, dynamic lexical tie, cycle result | Locally qualified; development container pending |
-| 009 | `apply_changes(document, changes)` | Ordered immutable-style nested state transformation | nested JSON + operations | root/nested set, delete/insert, order-sensitive list indexes | Locally qualified; development container pending |
+| 006 | `decode_runs(encoded)` | Stateful run-length parser with multi-digit counts | string → list/null | multi-digit runs, escaped literal separators, zero/invalid run policy | Development-container qualified; campaign/reference pending |
+| 007 | `apportion(total, weights)` | Exact largest-remainder integer allocation and deterministic ties | integer + integer list | exact total, zero weights, index tie break, >53-bit values | Development-container qualified; campaign/reference pending |
+| 008 | `topological_order(nodes, edges)` | Graph dependency resolution with stable ready-queue order | strings + edge pairs | disconnected graph, diamond, dynamic lexical tie, cycle result | Development-container qualified; campaign/reference pending |
+| 009 | `apply_changes(document, changes)` | Ordered immutable-style nested state transformation | nested JSON + operations | root/nested set, delete/insert, order-sensitive list indexes | Development-container qualified; campaign/reference pending |
 | 010 | `wrap_words(words, width)` | Greedy formatting with exact whitespace and overflow policy | string list + integer | exact-fit, oversized token, empty input, multiple lines | Planned |
 | 011 | `business_days(start, end, holidays)` | Date parsing and inclusive/exclusive calendar boundary | ISO strings + list | weekend endpoints, leap day, holiday/weekend overlap | Planned |
 | 012 | `parse_roman(text)` | Symbol parser with subtractive-pair validation | string | repeated symbols, legal subtraction, canonical rejection result | Planned |
@@ -134,7 +134,7 @@ is independently hash-bound and reloaded by the repository test suite. This prov
 local campaign harness across five semantic families. Five observations are not the
 100-attempt Stage 1 denominator and do not establish a population reliability rate.
 
-## Second-batch local qualification
+## Second-batch local and development-container qualification
 
 Fixtures 006–009 add four new implementation and data-shape families:
 
@@ -154,9 +154,19 @@ produced three identical `tests_failed` results for every pristine control and t
 identical `passed` results for every gold patch: 24 trusted-local evaluations plus four
 direct visible-failure checks.
 
-This is local construction evidence only. The exact bytes have not yet run through the
-two-phase development container, are not present in a frozen campaign manifest, and have
-not run on the rootless x86_64 reference host.
+The exact same controls and gold patches then ran three times apiece through the pinned
+two-phase development image. All 12 pristine results were stable `tests_failed`
+classifications, all 12 gold results were stable `passed` classifications, all six cases
+ran in every scorer, and there were no errors, skips, truncations, or residual managed
+containers. That adds 24 container results and 48 disposable candidate/scorer
+containers.
+
+The self-bound [Batch 002 report](evidence/fixture-qualification/2026-08-03-batch-002-development-container/README.md)
+records the exact source revision, image, patch, protocol, response, completion, and
+evaluation-binding identities. An always-on verifier recomputes the report and source
+identities; an opt-in live test reproduced all result bindings from fresh containers.
+The host remained rootful Docker Desktop on Apple Silicon, so the cumulative campaign
+and native rootless x86_64 reference-host repetition are still pending.
 
 ## Batch protocol
 

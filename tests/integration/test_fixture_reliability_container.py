@@ -25,11 +25,25 @@ _REPORT = (
     / "2026-08-03-batch-001-development-container"
     / "report.json"
 )
+_SECOND_REPORT = (
+    _REPOSITORY_ROOT
+    / "docs"
+    / "evidence"
+    / "fixture-qualification"
+    / "2026-08-03-batch-002-development-container"
+    / "report.json"
+)
 _FIRST_BATCH = (
     "002-slug-normalization",
     "003-interval-merge",
     "004-json-pointer",
     "005-stable-dedupe",
+)
+_SECOND_BATCH = (
+    "006-run-decoder",
+    "007-apportionment",
+    "008-topological-order",
+    "009-ordered-changes",
 )
 
 
@@ -124,20 +138,19 @@ def _result_payload(result: LocalEvaluationResult) -> dict[str, object]:
 
 
 def _load_expected_outcome(fixture_name: str, outcome_name: str) -> dict[str, object]:
-    report = cast(dict[str, object], json.loads(_REPORT.read_bytes()))
-    fixture_entries = cast(list[object], report["fixtures"])
     expected_fixture_id = f"fixture-{fixture_name}"
-    for raw_entry in fixture_entries:
-        entry = cast(dict[str, object], raw_entry)
-        if entry["fixture_id"] == expected_fixture_id:
-            outcomes = cast(dict[str, object], entry["outcomes"])
-            return cast(dict[str, object], outcomes[outcome_name])
+    for report_path in (_REPORT, _SECOND_REPORT):
+        report = cast(dict[str, object], json.loads(report_path.read_bytes()))
+        fixture_entries = cast(list[object], report["fixtures"])
+        for raw_entry in fixture_entries:
+            entry = cast(dict[str, object], raw_entry)
+            if entry["fixture_id"] == expected_fixture_id:
+                outcomes = cast(dict[str, object], entry["outcomes"])
+                return cast(dict[str, object], outcomes[outcome_name])
     raise AssertionError(f"missing fixture evidence: {expected_fixture_id}")
 
 
-@pytest.mark.container
-@pytest.mark.parametrize("fixture_name", _FIRST_BATCH)
-def test_first_fixture_batch_repeats_pristine_failure_and_gold_pass_in_container(
+def _assert_fixture_repeats_pristine_failure_and_gold_pass_in_container(
     fixture_name: str,
 ) -> None:
     image = os.environ.get("GUILDMIND_DEVELOPMENT_EVALUATOR_IMAGE")
@@ -172,3 +185,19 @@ def test_first_fixture_batch_repeats_pristine_failure_and_gold_pass_in_container
         expected_evidence=_load_expected_outcome(fixture_name, "gold"),
         image=image,
     )
+
+
+@pytest.mark.container
+@pytest.mark.parametrize("fixture_name", _FIRST_BATCH)
+def test_first_fixture_batch_repeats_pristine_failure_and_gold_pass_in_container(
+    fixture_name: str,
+) -> None:
+    _assert_fixture_repeats_pristine_failure_and_gold_pass_in_container(fixture_name)
+
+
+@pytest.mark.container
+@pytest.mark.parametrize("fixture_name", _SECOND_BATCH)
+def test_second_fixture_batch_repeats_pristine_failure_and_gold_pass_in_container(
+    fixture_name: str,
+) -> None:
+    _assert_fixture_repeats_pristine_failure_and_gold_pass_in_container(fixture_name)

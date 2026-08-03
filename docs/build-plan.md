@@ -571,9 +571,9 @@ Run one deterministic task through a complete isolated lifecycle and reproduce t
   development-container pristine/gold matrices, then calibrates fixtures 001–005 through
   one content-bound, zero-retry local campaign with 5/5 expected terminal results. Treat
   those five observations as breadth/calibration evidence only. Batch 002 now has four
-  additional fixture families (006–009) through the three-repeat trusted-local gate;
-  their exact development-container matrix and a new cumulative manifest remain the
-  next acceptance steps.
+  additional fixture families (006–009) through both three-repeat trusted-local and
+  digest-pinned two-phase development-container gates. A new cumulative fixtures
+  001–009 manifest and campaign remain the next acceptance step.
 - Freeze the real normal-fixture campaign separately after all 20 distinct fixtures are
   accepted. Use five explicit round-major attempts per fixture, fixed attempt IDs and
   seeds, no hidden retry, and one report whose infrastructure-error numerator and
