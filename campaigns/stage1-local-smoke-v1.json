@@ -1,0 +1,52 @@
+{
+  "attempts": [
+    {
+      "attempt_id": "stage1-local-smoke-r001-fixture-001",
+      "fixture_id": "fixture-001-python-addition",
+      "round_index": 0,
+      "seed": 0
+    }
+  ],
+  "budget_limits": {
+    "max_container_wall_seconds": null,
+    "max_elapsed_seconds": null,
+    "max_estimated_cost_usd": null,
+    "max_input_tokens": null,
+    "max_model_calls": 1,
+    "max_model_retries": 0,
+    "max_output_tokens": null,
+    "max_tool_calls": 0,
+    "max_tool_cpu_seconds": null,
+    "max_total_tokens": 128,
+    "schema_version": "0.1"
+  },
+  "campaign_id": "stage1-local-smoke-v1",
+  "candidate_id": "scripted-solo-v0",
+  "code_source_sha256": "76d1cb573efe3d75350bc0b65e2ae1298873930fc36dc184a097b14a9d6dbd28",
+  "evaluator": {
+    "environment_digest": "sha256:4b5272a947d6b4d85d99cef7beb6221a52cf97f47d91c7c6f0c7a12ddc1076fc",
+    "evaluator_version": "guildmind/local-fixture-v1",
+    "kind": "local"
+  },
+  "evidence_tier": "development",
+  "experiment_id": "experiment-0001",
+  "fixtures": [
+    {
+      "expected_evaluation_outcome": "passed",
+      "expected_run_status": "succeeded",
+      "fixture_id": "fixture-001-python-addition",
+      "fixture_path": "fixtures/001-python-addition",
+      "fixture_tree_sha256": "4265c6d84cea1446996dcd946353482e2fa5dfe9f0f749f44ee63c835454355b",
+      "solution_patch_sha256": "9d22ab07f9a9d126aecfe0935848b3e5614f9e114749240405d70a843261ef8b"
+    }
+  ],
+  "maximum_infrastructure_error_rate": 0.01,
+  "model": {
+    "kind": "scripted_patch",
+    "model_id": "guildmind/fake-scripted-patch-v1"
+  },
+  "report_schema_version": "guildmind.reliability-campaign-report/v1",
+  "retry_limit": 0,
+  "rounds": 1,
+  "schema_version": "guildmind.reliability-campaign/v1"
+}

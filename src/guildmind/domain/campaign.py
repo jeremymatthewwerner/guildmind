@@ -10,6 +10,7 @@ from pydantic import Field, StringConstraints, field_validator, model_validator
 
 from guildmind.domain.models import (
     BudgetLimits,
+    BudgetUsage,
     DomainModel,
     NonEmptyStr,
     NonNegativeInt,
@@ -172,6 +173,8 @@ class ReliabilityCampaignManifest(DomainModel):
             self.evaluator.kind is not CampaignEvaluatorKind.CONTAINER
         ):
             raise ValueError("reference campaigns require the container evaluator")
+        if self.budget_limits.max_model_retries != 0:
+            raise ValueError("campaign attempt budgets must disable model retries")
         return self
 
     @property
@@ -184,6 +187,14 @@ class ReliabilityCampaignTerminalEvidence(DomainModel):
 
     run_id: CampaignId
     task_id: NonEmptyStr
+    task_content_sha256: Sha256
+    evaluator_version: NonEmptyStr
+    environment_digest: Sha256Digest
+    requested_model: NonEmptyStr
+    returned_model: NonEmptyStr | None
+    code_revision: NonEmptyStr
+    budget_used: BudgetUsage
+    budget_reserved: BudgetUsage
     run_status: RunStatus
     evaluation_outcome: NonEmptyStr | None
     manifest_revision: NonNegativeInt
@@ -202,6 +213,10 @@ class ReliabilityCampaignTerminalEvidence(DomainModel):
             raise ValueError("campaign terminal evidence requires a terminal run")
         if self.manifest_revision >= self.event_count:
             raise ValueError("manifest revision must be less than event count")
+        if self.budget_reserved != BudgetUsage():
+            raise ValueError("campaign terminal evidence cannot retain reserved budget")
+        if self.run_status is RunStatus.SUCCEEDED and self.returned_model is None:
+            raise ValueError("successful campaign evidence requires a returned model")
         return self
 
 
@@ -213,7 +228,7 @@ class ReliabilityCampaignAttemptEvidence(DomainModel):
     )
     attempt: ReliabilityCampaignAttempt
     disposition: CampaignAttemptDisposition
-    observed_run_ids: tuple[CampaignId, ...]
+    observed_run_ids: tuple[NonEmptyStr, ...]
     terminal: ReliabilityCampaignTerminalEvidence | None = None
     recovery_attempted: StrictBool = False
     recovery_succeeded: StrictBool = False

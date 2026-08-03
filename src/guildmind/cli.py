@@ -21,6 +21,14 @@ from typing import Any
 from guildmind.domain import export_json_schemas
 from guildmind.evaluation import LocalEvaluator, load_fixture
 from guildmind.models import ScriptedPatchModel
+from guildmind.runtime.campaign import (
+    CampaignConfigurationError,
+    CampaignEvidenceError,
+    ensure_campaign_output_available,
+    load_reliability_campaign,
+    run_reliability_campaign,
+    write_reliability_campaign_report,
+)
 from guildmind.runtime.recovery import (
     RecoveryDeniedError,
     RecoveryPostCommitMaintenanceError,
@@ -147,6 +155,36 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("--state-dir", type=Path, default=Path(".guildmind"))
     run.add_argument("--run-id", default=None)
     run.set_defaults(handler=_run)
+
+    campaign = subcommands.add_parser(
+        "campaign",
+        help="run a frozen fixture-reliability campaign",
+    )
+    campaign_commands = campaign.add_subparsers(dest="campaign_command", required=True)
+    campaign_run = campaign_commands.add_parser(
+        "run",
+        help="run one development-only scripted-patch campaign",
+    )
+    campaign_run.add_argument("manifest", type=Path)
+    campaign_run.add_argument(
+        "--repository-root",
+        type=Path,
+        default=Path("."),
+        help="repository containing the manifest, source identity, and fixtures",
+    )
+    campaign_run.add_argument(
+        "--state-dir",
+        type=Path,
+        required=True,
+        help="new directory in which isolated attempt evidence will be created",
+    )
+    campaign_run.add_argument(
+        "--output",
+        type=Path,
+        required=True,
+        help="new canonical report file; existing paths are never overwritten",
+    )
+    campaign_run.set_defaults(handler=_run_campaign)
 
     evaluate = subcommands.add_parser("evaluate", help="evaluate a patch on a local fixture")
     evaluate.add_argument("fixture", type=Path)
@@ -457,6 +495,55 @@ def _run(arguments: argparse.Namespace) -> int:
         }
     )
     return 0 if result.evaluation.outcome == "passed" else 2
+
+
+def _run_campaign(arguments: argparse.Namespace) -> int:
+    error_schema = "guildmind.reliability-campaign-error/v1"
+    try:
+        output = ensure_campaign_output_available(arguments.output)
+        campaign = load_reliability_campaign(
+            arguments.manifest,
+            repository_root=arguments.repository_root,
+        )
+        report = run_reliability_campaign(
+            campaign,
+            state_directory=arguments.state_dir,
+            git_revision=_code_revision(),
+        )
+        write_reliability_campaign_report(report, output)
+    except (CampaignConfigurationError, CampaignEvidenceError) as error:
+        _print_json(
+            {
+                "error": str(error),
+                "schema_version": error_schema,
+            }
+        )
+        return 1
+
+    body = report.body
+    _print_json(
+        {
+            "all_expected": body.all_expected,
+            "attempt_dispositions": [evidence.disposition.value for evidence in body.attempts],
+            "campaign_id": body.manifest.campaign_id,
+            "campaign_manifest_sha256": body.campaign_manifest_sha256,
+            "campaign_passed": body.campaign_passed,
+            "code_identity_verified": body.code_identity_verified,
+            "complete": body.complete,
+            "evidence_tier": body.manifest.evidence_tier.value,
+            "expected_attempt_count": body.expected_attempt_count,
+            "infrastructure_error_count": body.infrastructure_error_count,
+            "infrastructure_error_rate": body.infrastructure_error_rate,
+            "intended_attempt_count": body.intended_attempt_count,
+            "output": str(output),
+            "report_sha256": report.content_sha256,
+            "schema_version": "guildmind.reliability-campaign-result/v1",
+            "source_manifest_sha256": body.source_manifest_sha256,
+            "state_manifest_verified": body.state_manifest_verified,
+            "threshold_met": body.threshold_met,
+        }
+    )
+    return 0 if body.campaign_passed else 2
 
 
 def _evaluate(arguments: argparse.Namespace) -> int:

@@ -26,6 +26,7 @@ from guildmind.domain import (
     ReliabilityCampaignReportBody,
     ReliabilityCampaignTerminalEvidence,
     RunStatus,
+    TaskSpec,
     canonical_json,
     canonical_sha256,
     sha256_bytes,
@@ -37,7 +38,13 @@ from guildmind.runtime.clock import Clock, SystemClock
 from guildmind.runtime.recovery import recover_existing_fixture_run
 from guildmind.runtime.replay import ReplayIntegrityError, replay_events, semantic_digest
 from guildmind.runtime.runner import FixtureRunner, FixtureRunPostCommitMaintenanceError
-from guildmind.storage import EventStore, StoreIntegrityError, audit_storage
+from guildmind.storage import (
+    ArtifactCorruptionError,
+    EventStore,
+    FileArtifactStore,
+    StoreIntegrityError,
+    audit_storage,
+)
 from guildmind.storage._fsops import rename_noreplace_at
 
 _MANIFEST_MAX_BYTES = 1_048_576
@@ -417,13 +424,16 @@ def write_reliability_campaign_report(
 def load_reliability_campaign_report(path: Path) -> ReliabilityCampaignReport:
     """Load and validate one bounded canonical report envelope."""
 
-    report_path = _canonical_existing_path(path, label="campaign report")
-    report_bytes = _read_regular_file(
-        report_path,
-        label="campaign report",
-        max_bytes=_REPORT_MAX_BYTES,
-    )
-    raw_report = _strict_json_object(report_bytes, label="campaign report")
+    try:
+        report_path = _canonical_existing_path(path, label="campaign report")
+        report_bytes = _read_regular_file(
+            report_path,
+            label="campaign report",
+            max_bytes=_REPORT_MAX_BYTES,
+        )
+        raw_report = _strict_json_object(report_bytes, label="campaign report")
+    except CampaignConfigurationError as error:
+        raise CampaignEvidenceError(f"campaign report cannot be loaded: {error}") from error
     try:
         return ReliabilityCampaignReport.model_validate(raw_report)
     except ValidationError as error:
@@ -587,9 +597,81 @@ def _reconcile_attempt(
         )
 
     commitment = snapshot.roots[0]
+    observed_head_sha256 = events[-1].content_hash()
+    if (
+        commitment.manifest_sha256 != canonical_sha256(manifest)
+        or commitment.event_count != len(events)
+        or commitment.head_event_sha256 != observed_head_sha256
+    ):
+        return _attempt_evidence(
+            attempt,
+            observed_run_ids,
+            note,
+            disposition=CampaignAttemptDisposition.EVIDENCE_INVALID,
+            diagnostic="attempt_changed_after_initial_audit",
+        )
+
+    task_reference = manifest.artifacts.get("task_spec")
+    if task_reference is None:
+        return _attempt_evidence(
+            attempt,
+            observed_run_ids,
+            note,
+            disposition=CampaignAttemptDisposition.EVIDENCE_INVALID,
+            diagnostic="attempt_task_spec_missing",
+        )
+    try:
+        artifact_store = FileArtifactStore.open_existing_read_only(
+            state_directory / "artifacts",
+            trusted_base=state_directory.parent,
+        )
+        task_bytes = artifact_store.get_bytes(task_reference)
+        task = TaskSpec.model_validate_json(task_bytes)
+        if task_bytes != canonical_json(task).encode("utf-8"):
+            raise ValueError("task spec is not canonical JSON")
+    except (ArtifactCorruptionError, OSError, ValidationError, ValueError) as error:
+        return _attempt_evidence(
+            attempt,
+            observed_run_ids,
+            note,
+            disposition=CampaignAttemptDisposition.EVIDENCE_INVALID,
+            diagnostic=f"attempt_task_spec_invalid:{type(error).__name__}",
+        )
+    task_evaluator_version = task.metadata.get("evaluator_version")
+    if not isinstance(task_evaluator_version, str) or not task_evaluator_version.strip():
+        return _attempt_evidence(
+            attempt,
+            observed_run_ids,
+            note,
+            disposition=CampaignAttemptDisposition.EVIDENCE_INVALID,
+            diagnostic="attempt_evaluator_version_missing",
+        )
+
+    final_integrity = audit_storage(state_directory)
+    final_snapshot = final_integrity.ledger_snapshot
+    if (
+        final_snapshot != snapshot
+        or not final_integrity.references_verified
+        or not final_integrity.clean
+    ):
+        return _attempt_evidence(
+            attempt,
+            observed_run_ids,
+            note,
+            disposition=CampaignAttemptDisposition.EVIDENCE_INVALID,
+            diagnostic="attempt_changed_during_reconciliation",
+        )
     terminal = ReliabilityCampaignTerminalEvidence(
         run_id=manifest.run_id,
         task_id=manifest.task_id,
+        task_content_sha256=task.task_content_hash,
+        evaluator_version=task_evaluator_version,
+        environment_digest=manifest.environment_digest,
+        requested_model=manifest.requested_model,
+        returned_model=manifest.returned_model,
+        code_revision=manifest.code_revision,
+        budget_used=replay.budget_used,
+        budget_reserved=replay.budget_reserved,
         run_status=manifest.status,
         evaluation_outcome=replay.evaluation_outcome,
         manifest_revision=commitment.manifest_revision,
@@ -597,34 +679,38 @@ def _reconcile_attempt(
         event_count=commitment.event_count,
         head_event_sha256=commitment.head_event_sha256,
         semantic_digest=semantic_digest(events),
-        ledger_snapshot_sha256=snapshot.snapshot_sha256,
-        storage_state=integrity.state.value,
-        references_verified=integrity.references_verified,
-        storage_clean=integrity.clean,
+        ledger_snapshot_sha256=final_snapshot.snapshot_sha256,
+        storage_state=final_integrity.state.value,
+        references_verified=final_integrity.references_verified,
+        storage_clean=final_integrity.clean,
     )
     expected_code_revision = f"source-sha256:{campaign.manifest.code_source_sha256}"
     identity_matches = (
         manifest.experiment_id == campaign.manifest.experiment_id
         and manifest.task_id == fixture.fixture_id
+        and task.task_id == fixture.fixture_id
         and manifest.candidate_id == campaign.manifest.candidate_id
         and manifest.requested_model == campaign.manifest.model.model_id
+        and manifest.returned_model in {None, campaign.manifest.model.model_id}
+        and (
+            replay.evaluation_outcome is None
+            or manifest.returned_model == campaign.manifest.model.model_id
+        )
         and manifest.seed == attempt.seed
         and manifest.environment_digest == campaign.manifest.evaluator.environment_digest
+        and task.image_digest == campaign.manifest.evaluator.environment_digest
+        and task_evaluator_version == campaign.manifest.evaluator.evaluator_version
         and manifest.code_revision == expected_code_revision
         and manifest.budget_limits == campaign.manifest.budget_limits
     )
-    if not identity_matches or not integrity.references_verified or not integrity.clean:
+    if not identity_matches:
         return _attempt_evidence(
             attempt,
             observed_run_ids,
             note,
             disposition=CampaignAttemptDisposition.EVIDENCE_INVALID,
             terminal=terminal,
-            diagnostic=(
-                "attempt_identity_mismatch"
-                if not identity_matches
-                else "attempt_storage_is_not_clean_and_verified"
-            ),
+            diagnostic="attempt_identity_mismatch",
         )
     if note is not None and note.post_commit_maintenance_error:
         return _attempt_evidence(
