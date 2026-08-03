@@ -18,6 +18,7 @@ _REPORTS = (
         "2026-08-03-batch-001-development-container/report.json",
         "stage1-fixture-batch-001",
         "c11d38b8372937191153ce4a87805f27b281f1d0",
+        "31925a81fc6a21a82bcaf2370a6dfa20994a5427180fff8c0a3943d274e960d7",
         (
             "002-slug-normalization",
             "003-interval-merge",
@@ -29,6 +30,7 @@ _REPORTS = (
         "2026-08-03-batch-002-development-container/report.json",
         "stage1-fixture-batch-002",
         "13d3b5ebf0dba0b585999e135bac15b5f0032d5d",
+        "31925a81fc6a21a82bcaf2370a6dfa20994a5427180fff8c0a3943d274e960d7",
         (
             "006-run-decoder",
             "007-apportionment",
@@ -40,6 +42,7 @@ _REPORTS = (
         "2026-08-03-batch-003-development-container/report.json",
         "stage1-fixture-batch-003",
         "a39d03f8f8ca6b64fa53192c4828e45f8a4ab83c",
+        "31925a81fc6a21a82bcaf2370a6dfa20994a5427180fff8c0a3943d274e960d7",
         (
             "010-word-wrap",
             "011-business-days",
@@ -47,9 +50,19 @@ _REPORTS = (
             "013-grid-rotation",
         ),
     ),
+    (
+        "2026-08-03-batch-004-development-container/report.json",
+        "stage1-fixture-batch-004",
+        "7c9eebaf293ea088db07fdaa9daf8441c21a0b00",
+        "5fbe7aaa9fb81a28482cdce0a7b47a2fe4272e9b351ae5255683e12734c1959e",
+        (
+            "014-transaction-summary",
+            "015-route-matcher",
+            "016-backoff-schedule",
+            "017-inventory-delta",
+        ),
+    ),
 )
-_IMAGE_DIGEST = "31925a81fc6a21a82bcaf2370a6dfa20994a5427180fff8c0a3943d274e960d7"
-_IMAGE_REFERENCE = f"guildmind/evaluator@sha256:{_IMAGE_DIGEST}"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -102,11 +115,14 @@ def _assert_sha256(value: JsonValue) -> str:
     return digest
 
 
-@pytest.mark.parametrize(("report_relative", "batch_id", "revision", "fixtures"), _REPORTS)
+@pytest.mark.parametrize(
+    ("report_relative", "batch_id", "revision", "image_digest", "fixtures"), _REPORTS
+)
 def test_fixture_batch_container_report_is_self_bound_and_matches_sources(
     report_relative: str,
     batch_id: str,
     revision: str,
+    image_digest: str,
     fixtures: tuple[str, ...],
 ) -> None:
     report = _load_report(_REPORT_ROOT / report_relative)
@@ -134,7 +150,7 @@ def test_fixture_batch_container_report_is_self_bound_and_matches_sources(
     assert report["batch_id"] == batch_id
     assert report["evidence_level"] == "development-container"
     assert report["evaluator_version"] == "guildmind/container-python-call-v2"
-    assert report["image_reference"] == _IMAGE_REFERENCE
+    assert report["image_reference"] == f"guildmind/evaluator@sha256:{image_digest}"
     assert report["recorded_on"] == "2026-08-03"
     assert report["repository_revision"] == revision
     assert report["repository_tracked_clean"] is True
@@ -168,7 +184,7 @@ def test_fixture_batch_container_report_is_self_bound_and_matches_sources(
         assert entry["challenge_sha256"] == bundle.challenge_sha256
         assert entry["oracle_sha256"] == bundle.oracle_sha256
         assert entry["expected_cases"] == bundle.case_count == 6
-        assert entry["image_id"] == f"sha256:{_IMAGE_DIGEST}"
+        assert entry["image_id"] == f"sha256:{image_digest}"
         assert entry["task_content_hash"] == canonical_sha256(
             {
                 "challenge_sha256": bundle.challenge_sha256,

@@ -41,6 +41,14 @@ _THIRD_REPORT = (
     / "2026-08-03-batch-003-development-container"
     / "report.json"
 )
+_FOURTH_REPORT = (
+    _REPOSITORY_ROOT
+    / "docs"
+    / "evidence"
+    / "fixture-qualification"
+    / "2026-08-03-batch-004-development-container"
+    / "report.json"
+)
 _FIRST_BATCH = (
     "002-slug-normalization",
     "003-interval-merge",
@@ -59,6 +67,14 @@ _THIRD_BATCH = (
     "012-roman-parser",
     "013-grid-rotation",
 )
+_FOURTH_BATCH = (
+    "014-transaction-summary",
+    "015-route-matcher",
+    "016-backoff-schedule",
+    "017-inventory-delta",
+)
+_HISTORICAL_IMAGE_VARIABLE = "GUILDMIND_HISTORICAL_DEVELOPMENT_EVALUATOR_IMAGE"
+_CURRENT_IMAGE_VARIABLE = "GUILDMIND_DEVELOPMENT_EVALUATOR_IMAGE"
 
 
 def _evaluate_three_times(
@@ -151,25 +167,30 @@ def _result_payload(result: LocalEvaluationResult) -> dict[str, object]:
     }
 
 
-def _load_expected_outcome(fixture_name: str, outcome_name: str) -> dict[str, object]:
+def _load_expected_fixture(fixture_name: str) -> tuple[dict[str, object], str]:
     expected_fixture_id = f"fixture-{fixture_name}"
-    for report_path in (_REPORT, _SECOND_REPORT, _THIRD_REPORT):
+    for report_path in (_REPORT, _SECOND_REPORT, _THIRD_REPORT, _FOURTH_REPORT):
         report = cast(dict[str, object], json.loads(report_path.read_bytes()))
         fixture_entries = cast(list[object], report["fixtures"])
         for raw_entry in fixture_entries:
             entry = cast(dict[str, object], raw_entry)
             if entry["fixture_id"] == expected_fixture_id:
-                outcomes = cast(dict[str, object], entry["outcomes"])
-                return cast(dict[str, object], outcomes[outcome_name])
+                return entry, cast(str, report["image_reference"])
     raise AssertionError(f"missing fixture evidence: {expected_fixture_id}")
 
 
 def _assert_fixture_repeats_pristine_failure_and_gold_pass_in_container(
     fixture_name: str,
+    *,
+    image_variable: str,
 ) -> None:
-    image = os.environ.get("GUILDMIND_DEVELOPMENT_EVALUATOR_IMAGE")
+    image = os.environ.get(image_variable)
     if image is None:
-        pytest.skip("GUILDMIND_DEVELOPMENT_EVALUATOR_IMAGE is not configured")
+        pytest.skip(f"{image_variable} is not configured")
+
+    expected_fixture, expected_image = _load_expected_fixture(fixture_name)
+    assert image == expected_image
+    outcomes = cast(dict[str, object], expected_fixture["outcomes"])
 
     fixture_root = _REPOSITORY_ROOT / "fixtures" / fixture_name
     evaluator = ContainerEvaluator(
@@ -190,13 +211,13 @@ def _assert_fixture_repeats_pristine_failure_and_gold_pass_in_container(
     _assert_repeated_container_result(
         pristine_results,
         expected_status=EvaluationStatus.TESTS_FAILED,
-        expected_evidence=_load_expected_outcome(fixture_name, "pristine_control"),
+        expected_evidence=cast(dict[str, object], outcomes["pristine_control"]),
         image=image,
     )
     _assert_repeated_container_result(
         gold_results,
         expected_status=EvaluationStatus.PASSED,
-        expected_evidence=_load_expected_outcome(fixture_name, "gold"),
+        expected_evidence=cast(dict[str, object], outcomes["gold"]),
         image=image,
     )
 
@@ -206,7 +227,10 @@ def _assert_fixture_repeats_pristine_failure_and_gold_pass_in_container(
 def test_first_fixture_batch_repeats_pristine_failure_and_gold_pass_in_container(
     fixture_name: str,
 ) -> None:
-    _assert_fixture_repeats_pristine_failure_and_gold_pass_in_container(fixture_name)
+    _assert_fixture_repeats_pristine_failure_and_gold_pass_in_container(
+        fixture_name,
+        image_variable=_HISTORICAL_IMAGE_VARIABLE,
+    )
 
 
 @pytest.mark.container
@@ -214,7 +238,10 @@ def test_first_fixture_batch_repeats_pristine_failure_and_gold_pass_in_container
 def test_second_fixture_batch_repeats_pristine_failure_and_gold_pass_in_container(
     fixture_name: str,
 ) -> None:
-    _assert_fixture_repeats_pristine_failure_and_gold_pass_in_container(fixture_name)
+    _assert_fixture_repeats_pristine_failure_and_gold_pass_in_container(
+        fixture_name,
+        image_variable=_HISTORICAL_IMAGE_VARIABLE,
+    )
 
 
 @pytest.mark.container
@@ -222,4 +249,18 @@ def test_second_fixture_batch_repeats_pristine_failure_and_gold_pass_in_containe
 def test_third_fixture_batch_repeats_pristine_failure_and_gold_pass_in_container(
     fixture_name: str,
 ) -> None:
-    _assert_fixture_repeats_pristine_failure_and_gold_pass_in_container(fixture_name)
+    _assert_fixture_repeats_pristine_failure_and_gold_pass_in_container(
+        fixture_name,
+        image_variable=_HISTORICAL_IMAGE_VARIABLE,
+    )
+
+
+@pytest.mark.container
+@pytest.mark.parametrize("fixture_name", _FOURTH_BATCH)
+def test_fourth_fixture_batch_repeats_pristine_failure_and_gold_pass_in_container(
+    fixture_name: str,
+) -> None:
+    _assert_fixture_repeats_pristine_failure_and_gold_pass_in_container(
+        fixture_name,
+        image_variable=_CURRENT_IMAGE_VARIABLE,
+    )
