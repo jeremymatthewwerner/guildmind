@@ -4,7 +4,8 @@
 contention, campaign harness, and five development-container-qualified fixture-breadth
 batches; fixtures 001–017 also have cumulative local campaign evidence, while the
 cumulative 20-fixture campaign has not been frozen or run<br>
-**Checkpoint:** the commit containing this handoff on `main`; the Batch 005 container
+**Saved implementation/evidence checkpoint:**
+`2e021e504b1acee9be03e3ac996aaf639e56d5b2` on `origin/main`. The Batch 005 container
 report is bound to clean tested revision
 `6492d5580fae5ab11de8cd3231cf1f91f99f4395`, while the Batch 004 cumulative campaign
 report is bound to clean tested revision
@@ -528,7 +529,7 @@ uv run guildmind evaluate \
   fixtures/002-slug-normalization/solution.patch
 ```
 
-The parameterized test covers fixtures 002–017 and all three pristine/gold repetitions;
+The parameterized test covers fixtures 002–020 and all three pristine/gold repetitions;
 the `evaluate` command is the direct single-fixture form.
 
 With both digest-pinned development images present, the complete accepted two-phase

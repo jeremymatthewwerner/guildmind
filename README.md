@@ -89,6 +89,10 @@ PettingZoo is being considered as an optional environment adapter for inexpensiv
 
 ## Current status
 
+For the exact stopping boundary, runnable commands, evidence limits, future costs, and
+ordered restart path, see the
+[current pause-point handoff](docs/progress/2026-08-03-pause-point.md).
+
 Guildmind now has its first deterministic local vertical slice. It can:
 
 - validate and export versioned task, experiment, run, event, budget, artifact,
