@@ -1,0 +1,41 @@
+{
+  "schema_version": "guildmind.python-call-oracle/v1",
+  "cases": [
+    {
+      "case_id": "case-0001",
+      "args": [{"token": "outer", "profile": {"token": "inner", "name": "Ada"}, "items": [{"secret": 1, "keep": 2}, "secret"]}, ["token", "secret"]],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": {"profile": {"name": "Ada"}, "items": [{"keep": 2}, "secret"]}}
+    },
+    {
+      "case_id": "case-0002",
+      "args": [[{"password": "x", "child": {"password": "y", "Password": "keep"}}, {"ok": [{"password": "z"}]}], ["password"]],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": [{"child": {"Password": "keep"}}, {"ok": [{}]}]}
+    },
+    {
+      "case_id": "case-0003",
+      "args": [{"empty_map": {}, "empty_list": [], "drop": {}, "nested": [{}, []]}, ["drop"]],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": {"empty_map": {}, "empty_list": [], "nested": [{}, []]}}
+    },
+    {
+      "case_id": "case-0004",
+      "args": [0, ["ignored"]],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": 0}
+    },
+    {
+      "case_id": "case-0005",
+      "args": [{"keep": "secret", "items": ["secret", {"keep": "secret"}]}, ["secret"]],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": {"keep": "secret", "items": ["secret", {"keep": "secret"}]}}
+    },
+    {
+      "case_id": "case-0006",
+      "args": [{"a": null, "b": false, "c": [0, "", {"d": 1}]}, []],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": {"a": null, "b": false, "c": [0, "", {"d": 1}]}}
+    }
+  ]
+}

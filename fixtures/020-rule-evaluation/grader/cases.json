@@ -1,0 +1,41 @@
+{
+  "schema_version": "guildmind.python-call-oracle/v1",
+  "cases": [
+    {
+      "case_id": "case-0001",
+      "args": [{"all": [{"fact": "enabled"}, {"not": {"fact": "suspended"}}]}, {"enabled": true, "suspended": true}],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": false}
+    },
+    {
+      "case_id": "case-0002",
+      "args": [{"fact": "count"}, {"count": 0}],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": false}
+    },
+    {
+      "case_id": "case-0003",
+      "args": [{"not": {"fact": "missing"}}, {}],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": true}
+    },
+    {
+      "case_id": "case-0004",
+      "args": [{"all": []}, {}],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": true}
+    },
+    {
+      "case_id": "case-0005",
+      "args": [{"any": []}, {}],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": false}
+    },
+    {
+      "case_id": "case-0006",
+      "args": [{"any": [{"all": [{"fact": "a"}, {"not": {"fact": "b"}}]}, {"fact": "c"}]}, {"a": true, "b": false}],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": true}
+    }
+  ]
+}

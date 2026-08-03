@@ -1,0 +1,27 @@
+{
+  "schema_version": "guildmind.fixture/v1",
+  "task_id": "fixture-018-latest-versions",
+  "problem_statement": "Fix latest_versions() so it returns the original record with the highest Semantic Versioning 2.0.0 precedence for each name, with names in first-seen order. Records contain a nonempty name, a valid major.minor.patch version with optional prerelease and build metadata, and may contain other JSON fields. Compare core components numerically; a release outranks a prerelease; compare prerelease identifiers left to right with numeric identifiers below nonnumeric identifiers and a longer equal-prefix prerelease above a shorter one. Build metadata does not affect precedence. When precedence is equal, retain the first record. Return [] for no records.",
+  "workspace_dir": "workspace",
+  "visible_test_files": [
+    "workspace/test_visible.py"
+  ],
+  "hidden_test_files": [
+    "grader/test_hidden.py"
+  ],
+  "evaluation_protocol": {
+    "kind": "python-call-v1",
+    "module": "versions",
+    "callable": "latest_versions",
+    "cases_file": "grader/cases.json"
+  },
+  "network_required": false,
+  "expected_test_count": 6,
+  "allowed_patch_paths": [
+    "versions.py"
+  ],
+  "timeout_seconds": 5,
+  "max_output_bytes": 8192,
+  "max_patch_bytes": 8192,
+  "max_patch_files": 1
+}

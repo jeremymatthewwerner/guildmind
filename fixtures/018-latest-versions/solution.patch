@@ -1,0 +1,45 @@
+diff --git a/versions.py b/versions.py
+--- a/versions.py
++++ b/versions.py
+@@ -3,15 +3,37 @@
+ from typing import Any
+ 
+ Record = dict[str, Any]
++VersionKey = tuple[int, int, int, int, tuple[tuple[int, int | str], ...]]
++
++
++def _version_key(version: str) -> VersionKey:
++    """Return a directly comparable SemVer precedence key."""
++
++    precedence = version.split("+", 1)[0]
++    if "-" in precedence:
++        core, prerelease = precedence.split("-", 1)
++    else:
++        core, prerelease = precedence, None
++    major, minor, patch = (int(component) for component in core.split("."))
++    if prerelease is None:
++        return major, minor, patch, 1, ()
++    identifiers = tuple(
++        (0, int(identifier)) if identifier.isdigit() else (1, identifier)
++        for identifier in prerelease.split(".")
++    )
++    return major, minor, patch, 0, identifiers
+ 
+ 
+ def latest_versions(records: list[Record]) -> list[Record]:
+-    """Return lexically greatest versions in alphabetical name order."""
++    """Return SemVer-latest original records in first-seen name order."""
+ 
+     selected: dict[str, Record] = {}
++    names: list[str] = []
+     for record in records:
+         name = record["name"]
+-        current = selected.get(name)
+-        if current is None or record["version"] > current["version"]:
++        if name not in selected:
+             selected[name] = record
+-    return [selected[name] for name in sorted(selected)]
++            names.append(name)
++        elif _version_key(record["version"]) > _version_key(selected[name]["version"]):
++            selected[name] = record
++    return [selected[name] for name in names]

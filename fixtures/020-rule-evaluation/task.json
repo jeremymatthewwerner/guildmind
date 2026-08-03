@@ -1,0 +1,27 @@
+{
+  "schema_version": "guildmind.fixture/v1",
+  "task_id": "fixture-020-rule-evaluation",
+  "problem_statement": "Fix evaluate_rule() so it evaluates a recursive Boolean rule against a JSON fact map. Every valid rule object has exactly one operator: {fact: name} is true only when the named fact is present and its value is truthy, with a missing fact false; {all: rules} requires every child and is true for an empty list; {any: rules} requires at least one child and is false for an empty list; and {not: rule} negates its child. Operators may nest arbitrarily within the bounded input, fact values may be any JSON value, and child order must not change the result.",
+  "workspace_dir": "workspace",
+  "visible_test_files": [
+    "workspace/test_visible.py"
+  ],
+  "hidden_test_files": [
+    "grader/test_hidden.py"
+  ],
+  "evaluation_protocol": {
+    "kind": "python-call-v1",
+    "module": "rules",
+    "callable": "evaluate_rule",
+    "cases_file": "grader/cases.json"
+  },
+  "network_required": false,
+  "expected_test_count": 6,
+  "allowed_patch_paths": [
+    "rules.py"
+  ],
+  "timeout_seconds": 5,
+  "max_output_bytes": 8192,
+  "max_patch_bytes": 4096,
+  "max_patch_files": 1
+}

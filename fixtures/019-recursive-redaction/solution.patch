@@ -1,0 +1,29 @@
+diff --git a/redaction.py b/redaction.py
+--- a/redaction.py
++++ b/redaction.py
+@@ -5,10 +5,19 @@ from typing import Any
+ JsonValue = None | bool | int | float | str | list[Any] | dict[str, Any]
+ 
+ 
+-def redact_keys(value: JsonValue, blocked: list[str]) -> JsonValue:
+-    """Remove blocked keys from only the root object."""
++def _redact(value: JsonValue, blocked: set[str]) -> JsonValue:
++    if isinstance(value, dict):
++        return {
++            key: _redact(item, blocked)
++            for key, item in value.items()
++            if key not in blocked
++        }
++    if isinstance(value, list):
++        return [_redact(item, blocked) for item in value]
++    return value
+ 
+-    if not isinstance(value, dict):
+-        return value
+-    blocked_keys = set(blocked)
+-    return {key: item for key, item in value.items() if key not in blocked_keys}
++
++def redact_keys(value: JsonValue, blocked: list[str]) -> JsonValue:
++    """Recursively remove blocked object keys while preserving JSON shape."""
++
++    return _redact(value, set(blocked))

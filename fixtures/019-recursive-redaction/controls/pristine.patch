@@ -1,0 +1,14 @@
+diff --git a/redaction.py b/redaction.py
+--- a/redaction.py
++++ b/redaction.py
+@@ -11,4 +11,9 @@ def redact_keys(value: JsonValue, blocked: list[str]) -> JsonValue:
+     if not isinstance(value, dict):
+         return value
+     blocked_keys = set(blocked)
+-    return {key: item for key, item in value.items() if key not in blocked_keys}
++    result: dict[str, Any] = {}
++    for key, item in value.items():
++        if key in blocked_keys:
++            continue
++        result[key] = item
++    return result

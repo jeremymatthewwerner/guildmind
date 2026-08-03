@@ -41,6 +41,11 @@ _FOURTH_BATCH = (
     ("016-backoff-schedule", "backoff.py"),
     ("017-inventory-delta", "inventory.py"),
 )
+_FIFTH_BATCH = (
+    ("018-latest-versions", "versions.py"),
+    ("019-recursive-redaction", "redaction.py"),
+    ("020-rule-evaluation", "rules.py"),
+)
 
 
 def _assert_identical_results(
@@ -145,6 +150,14 @@ def test_third_fixture_batch_has_stable_pristine_and_gold_outcomes(
 
 @pytest.mark.parametrize(("fixture_name", "implementation"), _FOURTH_BATCH)
 def test_fourth_fixture_batch_has_stable_pristine_and_gold_outcomes(
+    fixture_name: str,
+    implementation: str,
+) -> None:
+    _assert_stable_pristine_and_gold_outcomes(fixture_name, implementation)
+
+
+@pytest.mark.parametrize(("fixture_name", "implementation"), _FIFTH_BATCH)
+def test_fifth_fixture_batch_has_stable_pristine_and_gold_outcomes(
     fixture_name: str,
     implementation: str,
 ) -> None:

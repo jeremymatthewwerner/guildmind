@@ -1,0 +1,22 @@
+diff --git a/rules.py b/rules.py
+--- a/rules.py
++++ b/rules.py
+@@ -6,12 +6,13 @@ Rule = dict[str, Any]
+ 
+ 
+ def evaluate_rule(rule: Rule, facts: dict[str, Any]) -> bool:
+-    """Evaluate rules using fact presence and swapped collection operators."""
++    """Recursively evaluate one pure Boolean rule."""
+ 
+     if "fact" in rule:
+-        return rule["fact"] in facts
++        name = rule["fact"]
++        return name in facts and bool(facts[name])
+     if "all" in rule:
+-        return any(evaluate_rule(child, facts) for child in rule["all"])
++        return all(evaluate_rule(child, facts) for child in rule["all"])
+     if "any" in rule:
+-        return all(evaluate_rule(child, facts) for child in rule["any"])
+-    return evaluate_rule(rule["not"], facts)
++        return any(evaluate_rule(child, facts) for child in rule["any"])
++    return not evaluate_rule(rule["not"], facts)

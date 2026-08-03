@@ -38,7 +38,9 @@ gate and their three-repeat two-phase development-container gate. A separately c
 cumulative campaign then reconciled all 17 fixtures as expected with zero infrastructure
 errors. Fixtures 001–017 are therefore development-qualified; they still require
 inclusion in the final frozen schedule and native rootless x86_64 reference-host
-repetition. Rows 018–020 remain a construction plan.
+repetition. Fixtures 018–020 now have committed directories and exact controls and pass
+their three-repeat trusted-local pristine/gold gate. Their development-container and
+cumulative campaign gates remain pending.
 Locally-qualified, development-qualified, or planned rows may not be counted in the final
 campaign denominator, and none of these calibrations may be relabeled as the final Stage 1
 denominator.
@@ -83,13 +85,13 @@ A fixture is eligible only if all of the following hold:
 | 011 | `business_days(start, end, holidays)` | Date parsing and inclusive/exclusive calendar boundary | ISO strings + list | weekend endpoints, leap day, holiday/weekend overlap | Development-qualified; reference pending |
 | 012 | `parse_roman(text)` | Symbol parser with subtractive-pair validation | string | repeated symbols, legal subtraction, canonical rejection result | Development-qualified; reference pending |
 | 013 | `rotate_grid(grid)` | Rectangular matrix index transformation | nested lists | non-square matrix, one row/column, empty grid | Development-qualified; reference pending |
-| 014 | `summarize_transactions(rows)` | Filtered, grouped, stable aggregation | list of objects | refunds, missing categories, zero amounts, first-seen order | Development-container qualified; campaign/reference pending |
-| 015 | `match_route(pattern, path)` | Tokenized path matching and parameter extraction | strings → object/null | literal precedence, repeated separators, percent text policy | Development-container qualified; campaign/reference pending |
-| 016 | `backoff_schedule(base, factor, cap, attempts)` | Bounded deterministic recurrence | numeric scalars | cap crossing, zero attempts, nonintegral factor, no overshoot | Development-container qualified; campaign/reference pending |
-| 017 | `inventory_delta(before, after)` | Multiset accounting rather than set difference | string lists → object | duplicates, removals/additions of same item, stable keys | Development-container qualified; campaign/reference pending |
-| 018 | `latest_versions(records)` | Semantic-version precedence and stable record selection | list of objects | prerelease ordering, numeric components, equal-version first win | Planned |
-| 019 | `redact_keys(value, blocked)` | Recursive shape-preserving transformation | arbitrary nested JSON | blocked keys below arrays/maps, empty containers, scalar root | Planned |
-| 020 | `evaluate_rule(rule, facts)` | Recursive boolean rule tree with explicit missing-fact policy | nested rule object + map | nested all/any/not, falsy facts, missing fact, short-circuit independence | Planned |
+| 014 | `summarize_transactions(rows)` | Filtered, grouped, stable aggregation | list of objects | refunds, missing categories, zero amounts, first-seen order | Development-qualified; reference pending |
+| 015 | `match_route(pattern, path)` | Tokenized path matching and parameter extraction | strings → object/null | literal precedence, repeated separators, percent text policy | Development-qualified; reference pending |
+| 016 | `backoff_schedule(base, factor, cap, attempts)` | Bounded deterministic recurrence | numeric scalars | cap crossing, zero attempts, nonintegral factor, no overshoot | Development-qualified; reference pending |
+| 017 | `inventory_delta(before, after)` | Multiset accounting rather than set difference | string lists → object | duplicates, removals/additions of same item, stable keys | Development-qualified; reference pending |
+| 018 | `latest_versions(records)` | Semantic-version precedence and stable record selection | list of objects | prerelease ordering, numeric components, equal-version first win | Locally qualified; container/campaign/reference pending |
+| 019 | `redact_keys(value, blocked)` | Recursive shape-preserving transformation | arbitrary nested JSON | blocked keys below arrays/maps, empty containers, scalar root | Locally qualified; container/campaign/reference pending |
+| 020 | `evaluate_rule(rule, facts)` | Recursive Boolean rule tree with explicit missing-fact policy | nested rule object + map | nested all/any/not, falsy facts, missing fact, empty identities | Locally qualified; container/campaign/reference pending |
 
 ## First-batch local qualification
 
@@ -297,6 +299,32 @@ The development-container host remained rootful Docker Desktop on Apple Silicon,
 native rootless x86_64 reference-host repetition remains pending. Seventeen campaign
 observations are calibration evidence, not the final 100-attempt denominator or a
 population-level reliability claim. No provider or hosted runtime was used.
+
+## Fifth-batch trusted-local qualification
+
+Fixtures 018–020 complete the frozen family matrix with three distinct recursive/parser
+and data-shape boundaries:
+
+- stable original-record selection by full Semantic Versioning precedence, including
+  numeric core/prerelease identifiers, release precedence, ignored build metadata, and
+  first-wins ties;
+- recursive, case-sensitive blocked-key removal through nested objects and arrays while
+  preserving array positions, scalar values, empty containers, and root scalars; and
+- recursive `fact`/`all`/`any`/`not` evaluation with truthy JSON values, missing facts
+  false, standard empty-list identities, and order-independent pure children.
+
+Each has one visibly failing pristine implementation, one visible and five hidden tests,
+six sealed oracle cases, one exact semantics-preserving pristine control, one one-file
+gold patch, and the bounded `python-call-v1` contract. The shared integration gate
+produced three identical `tests_failed` results for every pristine control and three
+identical `passed` results for every gold patch: 18 trusted-local evaluations plus three
+direct visible-failure checks.
+
+No evaluator image source changed in this batch, but the exact new fixture bytes have not
+yet run through a digest-pinned two-phase image. Fixtures 018–020 are therefore locally
+qualified only. The development-container matrix, separately frozen cumulative
+20-fixture calibration, final 20 × 5 campaign, and reference-host repetition remain
+pending. No provider or hosted runtime was used.
 
 ## Batch protocol
 

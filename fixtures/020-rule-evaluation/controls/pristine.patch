@@ -1,0 +1,21 @@
+diff --git a/rules.py b/rules.py
+--- a/rules.py
++++ b/rules.py
+@@ -9,9 +9,10 @@ def evaluate_rule(rule: Rule, facts: dict[str, Any]) -> bool:
+     """Evaluate rules using fact presence and swapped collection operators."""
+ 
+-    if "fact" in rule:
+-        return rule["fact"] in facts
+-    if "all" in rule:
+-        return any(evaluate_rule(child, facts) for child in rule["all"])
+-    if "any" in rule:
+-        return all(evaluate_rule(child, facts) for child in rule["any"])
+-    return evaluate_rule(rule["not"], facts)
++    operator, operand = next(iter(rule.items()))
++    if operator == "fact":
++        return operand in facts
++    if operator == "all":
++        return any(evaluate_rule(child, facts) for child in operand)
++    if operator == "any":
++        return all(evaluate_rule(child, facts) for child in operand)
++    return evaluate_rule(operand, facts)

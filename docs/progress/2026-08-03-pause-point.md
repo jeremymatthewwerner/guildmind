@@ -1,18 +1,19 @@
 # Guildmind Pause-Point Handoff — 2026-08-03
 
 **Natural pause:** after the local Stage 1 storage, recovery, quarantine, same-digest CAS
-contention, campaign harness, and four development-container-qualified fixture-breadth
-batches; fixtures 001–017 also have cumulative local campaign evidence, while fixtures
-018–020 have not yet been built<br>
+contention, campaign harness, four development-container-qualified fixture-breadth
+batches, and a fifth batch through trusted-local qualification; fixtures 001–017 also
+have cumulative local campaign evidence<br>
 **Checkpoint:** the commit containing this handoff on `main`; the Batch 004 container
 report is bound to clean tested revision
 `7c9eebaf293ea088db07fdaa9daf8441c21a0b00`, while the Batch 004 cumulative campaign
 report is bound to clean tested revision
 `a856db8f152e2c37426bde6301a96b34c805e1aa`<br>
-**Repository gates:** current default 698 passed / 45 declared skips; 192 files
-formatted; Ruff clean and strict mypy clean across 83 source files. The complete
-dual-image development gate is 730 passed / 13 declared skips, using the preserved
-Batch 001–003 image and the rebuilt Batch 004 image<br>
+**Repository gates:** current default 701 passed / 45 declared skips; 204 files
+formatted; Ruff clean and strict mypy clean across 83 source files. The latest accepted
+complete dual-image gate before Batch 005 is 730 passed / 13 declared skips, using the
+preserved Batch 001–003 image and the rebuilt Batch 004 image. Batch 005 container
+qualification has not run<br>
 **Overall verdict:** useful local development substrate; authoritative Stage 1 gate
 still **NOT PASSED**
 
@@ -23,7 +24,7 @@ changing the institution around fixed models rather than changing their weights.
 now a tested local measurement substrate: repository-owned coding fixtures can run
 through a scripted fake model, constrained patch application, evaluation, immutable
 artifact storage, a transactional event ledger, replay, reporting, guarded recovery,
-integrity audit, and explicit resumable quarantine. Seventeen repository-owned fixtures
+integrity audit, and explicit resumable quarantine. Twenty repository-owned fixtures
 now exist. Fixture 001 anchors that complete campaign path. Fixtures 002–013 add twelve
 distinct semantic families in three reviewed batches; all three batches pass
 three-repeat trusted-local and two-phase development-container pristine/gold gates. A
@@ -42,6 +43,13 @@ expected with 238 replay-valid events, zero retries, zero recovery, zero infrast
 errors, and zero provider cost. Fresh reconciliation reproduced its complete report and
 canonical bytes exactly.
 
+Fixtures 018–020 complete the frozen family matrix with SemVer record selection,
+recursive shape-preserving key redaction, and recursive Boolean-rule evaluation. Their
+three pristine controls produced stable expected failures and their three gold patches
+produced stable passes in three trusted-local repetitions apiece: 18 local evaluations
+plus three direct visible-failure checks. Their development-container and campaign gates
+remain pending.
+
 The repository also contains a two-phase container evaluator and active resource and
 containment probes. Those have strong development evidence on Docker Desktop, but they
 have not passed the required rootless x86_64 Linux reference-host gate. External or
@@ -59,9 +67,10 @@ zero retries, and zero infrastructure errors. Batch 003 adds another 24 stable l
 182 events, zero retries, and zero infrastructure errors. Batch 004 adds another 24
 stable trusted-local results and 24 stable development-container results with 48 cleaned
 containers, followed by a 17/17 expected cumulative local campaign with 238 events,
-zero retries, and zero infrastructure errors. Three
-fixture families, the final 20-fixture × 5-round campaign, and reference-host repetition
-also remain undone. None of this changes the **NOT PASSED** Stage 1 verdict.
+zero retries, and zero infrastructure errors. Batch 005 adds 18 stable trusted-local
+results across the final three fixtures; its container and cumulative campaign gates,
+the final 20-fixture × 5-round campaign, and reference-host repetition remain undone.
+None of this changes the **NOT PASSED** Stage 1 verdict.
 
 ## What has been built
 
@@ -384,6 +393,22 @@ binds the manifest, code, fixture trees, gold patches, schedule, budgets, termin
 streams, and storage commitments. Seventeen attempts are calibration evidence, not the
 final 100-attempt denominator or a population-level 99% claim.
 
+### 12. Fifth fixture-breadth batch — local checkpoint
+
+Fixtures 018–020 add full SemVer precedence with stable original-record selection,
+recursive blocked-key removal through arbitrary JSON objects and arrays, and recursive
+`fact`/`all`/`any`/`not` evaluation with explicit missing/falsy and empty-list semantics.
+Each fixture has one visible and five hidden tests, six sealed cases, a
+semantics-preserving pristine control, and an exact one-file gold patch.
+
+The trusted-local gate produced nine stable pristine failures and nine stable gold
+passes plus three direct visible-failure checks. Build metadata ties, numeric and textual
+prerelease identifiers, nested objects under arrays, scalar roots/values, missing and
+falsy facts, empty `all`/`any`, and nested operator order are all explicit sealed
+discriminators. No evaluator program changed, but the exact new fixture bytes have not
+yet run through the current digest-pinned image. The fifth batch is locally qualified
+only; container and campaign claims remain pending.
+
 ## What works now
 
 ### Local prerequisites and tests
@@ -400,11 +425,11 @@ uv run guildmind doctor
 The final default and development-image gates at this pause point reported:
 
 ```text
-ruff format --check: 192 files already formatted
+ruff format --check: 204 files already formatted
 ruff check: all checks passed
 mypy: 83 source files, no issues found
-pytest (current default): 698 passed, 45 skipped in 20.30s
-pytest (complete dual-image development gate): 730 passed, 13 skipped in 119.47s
+pytest (current default): 701 passed, 45 skipped in 21.37s
+pytest (latest accepted pre-Batch-005 dual-image gate): 730 passed, 13 skipped in 119.47s
 ```
 
 With both development images configured, every development-container test ran. The 13
@@ -487,7 +512,7 @@ The scripted model has no paid provider dependency. Repeating a campaign require
 exact recorded content identities plus new state and output paths; existing evidence is
 never overwritten.
 
-All four breadth batches can be rechecked locally without a model or campaign run:
+All five breadth batches can be rechecked locally without a model or campaign run:
 
 ```bash
 uv run pytest -q tests/integration/test_fixture_reliability_corpus.py
@@ -516,10 +541,9 @@ that is a Docker licensing question, not a Guildmind deployment dependency.
 
 ## What does not work yet
 
-- The repository has 17 fixtures through trusted-local and development-container
-  qualification and cumulative local campaign qualification. Three planned families
-  remain before the 20-fixture corpus is complete. None has passed the native rootless
-  x86_64 reference host.
+- The repository has all 20 frozen fixtures through trusted-local qualification. Only
+  fixtures 001–017 have development-container and cumulative local campaign
+  qualification. None has passed the native rootless x86_64 reference host.
 - The largest frozen campaign currently covers 17 fixtures, one round, the scripted
   patch model, and trusted local evaluation. It does not support the container evaluator,
   resume an interrupted aggregate campaign, or constitute the planned 100-attempt
@@ -544,16 +568,16 @@ that is a Docker licensing question, not a Guildmind deployment dependency.
 
 ## Exact next step
 
-Implement the three remaining frozen families—semantic-version record selection,
-recursive blocked-key redaction, and recursive Boolean-rule evaluation—as fixtures
-018–020. Each needs the same visible-failure, six sealed cases, exact
-semantics-preserving pristine control, exact one-file gold patch, and three-repeat local
-and digest-pinned two-phase development-container qualification used by earlier batches.
+Commit the frozen fixtures 018–020 and their trusted-local gate before container
+execution. Then run each exact pristine control and gold patch three times through the
+current digest-pinned two-phase evaluator, preserving a new self-bound Batch 005 report
+and the rootful ARM development-host boundary. The accepted Batch 001–004 reports and
+image identities must remain immutable.
 
-After those fixture bytes and qualification evidence are accepted, freeze and run a
-separate cumulative 20-fixture one-round calibration. The final 20-fixture × 5-round
-campaign must then be frozen separately; neither the 17-fixture calibration nor the
-future one-round calibration may be relabelled as that denominator.
+After that qualification evidence is accepted, freeze and run a separate cumulative
+20-fixture one-round calibration. The final 20-fixture × 5-round campaign must then be
+frozen separately; neither the 17-fixture calibration nor the future one-round
+calibration may be relabelled as that denominator.
 
 A 100-attempt result is an empirical gate, not proof that an underlying population
 reliability exceeds 99%. Any stronger statistical claim needs its own preregistered
@@ -585,6 +609,6 @@ make check
 uv run guildmind doctor
 ```
 
-Then implement and qualify fixtures 018–020 as described above. Do not edit an accepted
-manifest, relabel either historical image, start provider-backed experiments, or rent a
-reference host before the 20-fixture campaign is frozen.
+Then commit and container-qualify fixtures 018–020 as described above. Do not edit an
+accepted manifest, relabel either historical image, start provider-backed experiments,
+or rent a reference host before the 20-fixture campaign is frozen.
