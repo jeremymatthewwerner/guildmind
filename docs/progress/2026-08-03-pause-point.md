@@ -2,17 +2,19 @@
 
 **Natural pause:** after the local Stage 1 storage, recovery, quarantine, same-digest CAS
 contention, campaign harness, and five development-container-qualified fixture-breadth
-batches; fixtures 001–017 also have cumulative local campaign evidence, while the
-cumulative 20-fixture campaign has not been frozen or run<br>
+batches plus the cumulative one-round local campaign across all 20 fixtures; the
+distinct 20-fixture × 5-round campaign has not been frozen or run<br>
 **Saved implementation/evidence checkpoint:**
-`2e021e504b1acee9be03e3ac996aaf639e56d5b2` on `origin/main`. The Batch 005 container
-report is bound to clean tested revision
+the original pause was saved at `2e021e504b1acee9be03e3ac996aaf639e56d5b2` on
+`origin/main`; the cumulative 20-fixture manifest was subsequently frozen at
+`f0ca4e77898371d041f0740c869d9cca1256dc44`. The Batch 005 container report is bound to
+clean tested revision
 `6492d5580fae5ab11de8cd3231cf1f91f99f4395`, while the Batch 004 cumulative campaign
 report is bound to clean tested revision
 `a856db8f152e2c37426bde6301a96b34c805e1aa`<br>
-**Repository gates:** current default 702 passed / 48 declared skips; 205 files
+**Repository gates:** current default 704 passed / 48 declared skips; 206 files
 formatted; Ruff clean and strict mypy clean across 83 source files. The complete
-dual-image development gate is 737 passed / 13 declared skips, using the preserved
+dual-image development gate is 739 passed / 13 declared skips, using the preserved
 Batch 001–003 image and the current image for Batches 004–005<br>
 **Overall verdict:** useful local development substrate; authoritative Stage 1 gate
 still **NOT PASSED**
@@ -49,7 +51,13 @@ three pristine controls produced stable expected failures and their three gold p
 produced stable passes in three trusted-local repetitions apiece: 18 local evaluations
 plus three direct visible-failure checks. The same exact bytes then produced nine stable
 failures and nine stable passes through the unchanged current image with 36 cleaned
-containers and no infrastructure errors. Their cumulative campaign gate remains pending.
+containers and no infrastructure errors. A separately frozen cumulative campaign then
+completed 20/20 expected attempts with 280 replay-valid events, zero retries/recovery,
+zero infrastructure errors, and zero provider cost. Fresh reconciliation reproduced its
+[canonical report](../evidence/reliability-campaigns/2026-08-03-batch-005-local-calibration/README.md)
+exactly. The report preserves an ambient-working-directory `+dirty` Git marker despite
+independently verified content identities; revision discovery must be corrected before
+the final schedule is frozen.
 
 The repository also contains a two-phase container evaluator and active resource and
 containment probes. Those have strong development evidence on Docker Desktop, but they
@@ -59,7 +67,7 @@ institution search, and later research stages therefore remain intentionally blo
 
 This is a clean stopping point. The reliability-campaign contract is executable through
 a narrow development-only CLI, directly tested across success and negative evidence
-paths, and exercised by five immutable evidence manifests. The one-fixture smoke
+paths, and exercised by six immutable evidence manifests. The one-fixture smoke
 accepted the harness; Batch 001 adds 24 stable local results, 24 stable container results,
 and a 5/5 expected local campaign. Batch 002 adds another 24 stable local and 24 stable
 container results, followed by a 9/9 expected cumulative local campaign with 126 events,
@@ -70,7 +78,8 @@ stable trusted-local results and 24 stable development-container results with 48
 containers, followed by a 17/17 expected cumulative local campaign with 238 events,
 zero retries, and zero infrastructure errors. Batch 005 adds 18 stable trusted-local and
 18 stable development-container results across the final three fixtures with 36 cleaned
-containers; its cumulative campaign gate, the final 20-fixture × 5-round campaign, and
+containers, followed by a 20/20 expected cumulative local campaign with 280 events, zero
+retries, and zero infrastructure errors. The final 20-fixture × 5-round campaign and
 reference-host repetition remain undone. None of this changes the **NOT PASSED** Stage 1
 verdict.
 
@@ -414,8 +423,10 @@ passes, all six cases scored in every result, 36 cleaned containers, and no
 infrastructure errors. The self-bound
 [Batch 005 container evidence](../evidence/fixture-qualification/2026-08-03-batch-005-development-container/README.md)
 records the exact source, image, patch, response, completion, and evaluation identities.
-The fifth batch is development-container qualified; its cumulative campaign remains
-pending.
+The fifth batch is development-container qualified. Its separately frozen cumulative
+campaign then completed 20/20 expected terminal attempts; the
+[canonical evidence](../evidence/reliability-campaigns/2026-08-03-batch-005-local-calibration/README.md)
+records the exact reconciliation and Git-marker limitation.
 
 ## What works now
 
@@ -433,11 +444,11 @@ uv run guildmind doctor
 The final default and development-image gates at this pause point reported:
 
 ```text
-ruff format --check: 205 files already formatted
+ruff format --check: 206 files already formatted
 ruff check: all checks passed
 mypy: 83 source files, no issues found
-pytest (current default): 702 passed, 48 skipped in 21.32s
-pytest (complete dual-image development gate): 737 passed, 13 skipped in 135.08s
+pytest (current default): 704 passed, 48 skipped in 20.92s
+pytest (complete dual-image development gate): 739 passed, 13 skipped in 139.27s
 ```
 
 With both development images configured, every development-container test ran. The 13
@@ -482,7 +493,7 @@ make determinism
 ```
 
 The schema export now includes `ReliabilityCampaignManifest` and
-`ReliabilityCampaignReport`. The five accepted manifests are immutable evidence
+`ReliabilityCampaignReport`. The six accepted manifests are immutable evidence
 contracts. Each remains parseable and independently verifiable, while dispatch requires
 its exact bound code and fixture identities. To reproduce a campaign, first check out the
 tested implementation revision recorded in its linked evidence README, then use new
@@ -514,6 +525,11 @@ uv run guildmind campaign run campaigns/stage1-local-batch-004-v1.json \
   --repository-root . \
   --state-dir runs/reliability-campaigns/stage1-local-batch-004-rerun-state \
   --output runs/reliability-campaigns/stage1-local-batch-004-rerun-report.json
+
+uv run guildmind campaign run campaigns/stage1-local-batch-005-v1.json \
+  --repository-root . \
+  --state-dir runs/reliability-campaigns/stage1-local-batch-005-rerun-state \
+  --output runs/reliability-campaigns/stage1-local-batch-005-rerun-report.json
 ```
 
 The scripted model has no paid provider dependency. Repeating a campaign requires its
@@ -550,12 +566,15 @@ that is a Docker licensing question, not a Guildmind deployment dependency.
 ## What does not work yet
 
 - The repository has all 20 frozen fixtures through trusted-local and
-  development-container qualification. Only fixtures 001–017 have cumulative local
-  campaign qualification. None has passed the native rootless x86_64 reference host.
-- The largest frozen campaign currently covers 17 fixtures, one round, the scripted
+  development-container qualification plus cumulative one-round local campaign
+  qualification. None has passed the native rootless x86_64 reference host.
+- The largest frozen campaign currently covers 20 fixtures, one round, the scripted
   patch model, and trusted local evaluation. It does not support the container evaluator,
   resume an interrupted aggregate campaign, or constitute the planned 100-attempt
   reliability denominator.
+- The cumulative report's descriptive Git revision has an ambient-CWD `+dirty` suffix;
+  all content identities verified, but the CLI must bind revision discovery to the
+  declared repository root before the final campaign is frozen.
 - The 100-run determinism command is not a fixture-reliability campaign and must not be
   relabeled as one.
 - The rootless x86_64 Linux reference-host gate has not run. `guildmind doctor` correctly
@@ -576,15 +595,12 @@ that is a Docker licensing question, not a Guildmind deployment dependency.
 
 ## Exact next step
 
-Freeze and review a new content-bound cumulative fixtures 001–020 local campaign manifest
-without modifying any accepted historical manifest. Commit that manifest before
-execution, then run its exact one-round, zero-retry schedule from the bound clean revision
-into new state and report paths. Reconcile every attempt against its terminal ledger/CAS
-evidence and preserve the canonical report in a separate checkpoint.
+Correct campaign Git provenance so revision discovery uses the declared repository root,
+ignores unrelated untracked files, and fails closed on tracked source drift. Cover the
+ambient-CWD regression directly before changing the source identity again.
 
-The final 20-fixture × 5-round campaign must then be frozen separately; neither the
-17-fixture calibration nor the future one-round calibration may be relabelled as that
-denominator.
+Then freeze the final 20-fixture × 5-round campaign separately before execution. Neither
+the 17-fixture nor 20-fixture one-round calibration may be relabelled as that denominator.
 
 A 100-attempt result is an empirical gate, not proof that an underlying population
 reliability exceeds 99%. Any stronger statistical claim needs its own preregistered
@@ -616,6 +632,6 @@ make check
 uv run guildmind doctor
 ```
 
-Then freeze the cumulative fixtures 001–020 manifest as described above. Do not edit an
-accepted manifest, relabel either historical image, start provider-backed experiments,
-or rent a reference host before the 20-fixture campaign is frozen.
+Then fix and test campaign Git provenance as described above before freezing the distinct
+20-fixture × 5-round manifest. Do not edit an accepted manifest, relabel either
+historical image, start provider-backed experiments, or rent a reference host first.

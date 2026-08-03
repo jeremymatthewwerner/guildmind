@@ -367,6 +367,11 @@ def test_checked_in_historical_manifest_cannot_run_after_source_drift(
             "2026-08-03-batch-004-local-calibration/report.json",
             17,
         ),
+        (
+            "stage1-local-batch-005-v1.json",
+            "2026-08-03-batch-005-local-calibration/report.json",
+            20,
+        ),
     ],
 )
 def test_checked_in_campaign_report_matches_its_source_manifest(

@@ -40,7 +40,10 @@ errors. Fixtures 001–017 are therefore development-qualified; they still requi
 inclusion in the final frozen schedule and native rootless x86_64 reference-host
 repetition. Fixtures 018–020 now have committed directories and exact controls and pass
 their three-repeat trusted-local pristine/gold gate and three-repeat two-phase
-development-container gate. Their cumulative campaign gate remains pending.
+development-container gate. A separately frozen cumulative campaign then reconciled all
+20 fixtures as expected with zero infrastructure errors. All 20 fixtures are therefore
+development-qualified; they still require the distinct five-round campaign and native
+rootless x86_64 reference-host repetition.
 Locally-qualified, development-qualified, or planned rows may not be counted in the final
 campaign denominator, and none of these calibrations may be relabeled as the final Stage 1
 denominator.
@@ -89,9 +92,9 @@ A fixture is eligible only if all of the following hold:
 | 015 | `match_route(pattern, path)` | Tokenized path matching and parameter extraction | strings → object/null | literal precedence, repeated separators, percent text policy | Development-qualified; reference pending |
 | 016 | `backoff_schedule(base, factor, cap, attempts)` | Bounded deterministic recurrence | numeric scalars | cap crossing, zero attempts, nonintegral factor, no overshoot | Development-qualified; reference pending |
 | 017 | `inventory_delta(before, after)` | Multiset accounting rather than set difference | string lists → object | duplicates, removals/additions of same item, stable keys | Development-qualified; reference pending |
-| 018 | `latest_versions(records)` | Semantic-version precedence and stable record selection | list of objects | prerelease ordering, numeric components, equal-version first win | Development-container qualified; campaign/reference pending |
-| 019 | `redact_keys(value, blocked)` | Recursive shape-preserving transformation | arbitrary nested JSON | blocked keys below arrays/maps, empty containers, scalar root | Development-container qualified; campaign/reference pending |
-| 020 | `evaluate_rule(rule, facts)` | Recursive Boolean rule tree with explicit missing-fact policy | nested rule object + map | nested all/any/not, falsy facts, missing fact, empty identities | Development-container qualified; campaign/reference pending |
+| 018 | `latest_versions(records)` | Semantic-version precedence and stable record selection | list of objects | prerelease ordering, numeric components, equal-version first win | Development-qualified; final campaign/reference pending |
+| 019 | `redact_keys(value, blocked)` | Recursive shape-preserving transformation | arbitrary nested JSON | blocked keys below arrays/maps, empty containers, scalar root | Development-qualified; final campaign/reference pending |
+| 020 | `evaluate_rule(rule, facts)` | Recursive Boolean rule tree with explicit missing-fact policy | nested rule object + map | nested all/any/not, falsy facts, missing fact, empty identities | Development-qualified; final campaign/reference pending |
 
 ## First-batch local qualification
 
@@ -330,9 +333,23 @@ managed containers. The self-bound
 records the exact image, source, patch, protocol, response, completion, and
 evaluation-binding identities. Its static verifier and focused live reproduction passed.
 
-Fixtures 018–020 are now development-container qualified. The separately frozen
-cumulative 20-fixture calibration, final 20 × 5 campaign, and reference-host repetition
-remain pending. No provider or hosted runtime was used.
+Fixtures 018–020 are now development-container qualified. The separately committed
+[`stage1-local-batch-005-v1`](../campaigns/stage1-local-batch-005-v1.json) manifest then
+froze fixtures 001–020 into one explicit round with seeds 5001–5020 and zero retries.
+All 20/20 attempts were terminal, expected, replay-valid, and storage-clean: 280 events,
+20 model calls, zero recovery, zero infrastructure errors, and zero provider cost. Fresh
+reconciliation of the preserved raw state reproduced the complete report model and
+canonical bytes exactly. The
+[canonical Batch 005 campaign evidence](evidence/reliability-campaigns/2026-08-03-batch-005-local-calibration/README.md)
+binds the manifest, code, fixture trees, gold patches, schedule, budgets, terminal
+streams, and storage commitments.
+
+The report retains a `+dirty` descriptive Git marker caused by the CLI consulting its
+ambient main-worktree directory, which contained an unrelated untracked audio file,
+rather than the declared detached repository root. Independent content identities all
+verified, but that provenance weakness must be corrected before the final schedule is
+frozen. The final 20 × 5 campaign and reference-host repetition remain pending. No
+provider or hosted runtime was used.
 
 ## Batch protocol
 

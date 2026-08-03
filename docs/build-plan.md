@@ -585,8 +585,11 @@ Run one deterministic task through a complete isolated lifecycle and reproduce t
   results and zero infrastructure errors. Treat those 17 observations as
   breadth/calibration evidence only. Batch 005 now implements fixtures 018–020 and passes
   both their three-repeat trusted-local and reused digest-pinned two-phase
-  development-container pristine/gold gates. The separately frozen cumulative
-  20-fixture calibration is the next acceptance step.
+  development-container pristine/gold gates, followed by a separately frozen cumulative
+  fixtures 001–020 campaign with 20/20 expected terminal results, exact fresh
+  reconciliation, and zero infrastructure errors. Its ambient-working-directory
+  `+dirty` Git marker remains an explicit provenance defect to fix before the final
+  schedule. Treat those 20 observations as breadth/calibration evidence only.
 - Freeze the real normal-fixture campaign separately after all 20 distinct fixtures are
   accepted. Use five explicit round-major attempts per fixture, fixed attempt IDs and
   seeds, no hidden retry, and one report whose infrastructure-error numerator and
