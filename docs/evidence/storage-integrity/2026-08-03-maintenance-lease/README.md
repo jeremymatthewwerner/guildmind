@@ -91,6 +91,13 @@ processes with pipe-synchronized acquisition acknowledgements. It uses no timing
 | abrupt parent exit | A child forked by the holder remains alive after the holder exits abruptly but cannot retain the holder's lease |
 | case-folded state alias | On Darwin's default case-insensitive filesystem, `state` and `STATE` still coordinate through the same kernel inode |
 
+A later complete-suite run exposed a harness race in the abrupt-parent case: the outer
+process could probe the lock after the holder exited but before the fork child's
+registered post-fork cleanup had finished. The case now waits on an explicit child-ready
+pipe written only after that cleanup boundary, without adding a timing sleep. The exact
+case then passed 20 consecutive focused repetitions. The lease implementation did not
+change; the synchronization makes the observation match the boundary the test claims.
+
 Unit cases additionally cover nested same-process reference counting; failed registry
 handoff rollback; finalizer cleanup; released-lease and same-object double-entry
 rejection; cleanup when first-entry path/fence validation fails; both-descriptor cleanup

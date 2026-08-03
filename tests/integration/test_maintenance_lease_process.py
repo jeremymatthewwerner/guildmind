@@ -53,10 +53,19 @@ def _child_hold_lease(state_text: str, mode_text: str, barrier: Connection) -> N
 
 def _fork_inheritor_then_exit_abruptly(state_text: str, write_descriptor: int) -> None:
     lease = MaintenanceLease.acquire_shared(Path(state_text))
+    child_ready_read, child_ready_write = os.pipe()
     inherited_pid = os.fork()
     if inherited_pid == 0:
+        os.close(child_ready_read)
+        os.write(child_ready_write, b"1")
+        os.close(child_ready_write)
         signal.pause()
         os._exit(98)
+    os.close(child_ready_write)
+    try:
+        assert os.read(child_ready_read, 1) == b"1"
+    finally:
+        os.close(child_ready_read)
     os.write(write_descriptor, str(inherited_pid).encode("ascii"))
     assert lease is not None
     os._exit(0)
