@@ -11,6 +11,22 @@
       stroke-linejoin: round;
     }
 
+    .agent-cyan {
+      fill: #00B8D9;
+    }
+
+    .agent-violet {
+      fill: #7C3AED;
+    }
+
+    .agent-coral {
+      fill: #FF4D6D;
+    }
+
+    .shared-spark {
+      fill: #FFB703;
+    }
+
     .wordmark {
       fill: #111111;
       font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -40,12 +56,12 @@
     <path class="line" d="M332 180L284 228" />
     <path class="line" d="M256 340V318" />
 
-    <circle class="line" cx="160" cy="160" r="28" />
-    <circle class="line" cx="352" cy="160" r="28" />
-    <circle class="line" cx="256" cy="368" r="28" />
+    <circle class="line agent-cyan" cx="160" cy="160" r="28" />
+    <circle class="line agent-violet" cx="352" cy="160" r="28" />
+    <circle class="line agent-coral" cx="256" cy="368" r="28" />
 
     <path
-      class="line"
+      class="line shared-spark"
       d="M256 216C262 239 274 251 297 257C274 263 262 275 256 298C250 275 238 263 215 257C238 251 250 239 256 216Z"
     />
   </g>
