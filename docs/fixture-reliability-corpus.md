@@ -34,8 +34,11 @@ expected with zero infrastructure errors. Fixtures 001–013 are therefore
 development-qualified; they still require inclusion in the final frozen schedule and
 native rootless x86_64 reference-host repetition. Fixtures 014–017 now have committed
 directories and exact controls and pass their three-repeat trusted-local pristine/gold
-gate and their three-repeat two-phase development-container gate. Their cumulative
-campaign remains pending. Rows 018–020 remain a construction plan.
+gate and their three-repeat two-phase development-container gate. A separately committed
+cumulative campaign then reconciled all 17 fixtures as expected with zero infrastructure
+errors. Fixtures 001–017 are therefore development-qualified; they still require
+inclusion in the final frozen schedule and native rootless x86_64 reference-host
+repetition. Rows 018–020 remain a construction plan.
 Locally-qualified, development-qualified, or planned rows may not be counted in the final
 campaign denominator, and none of these calibrations may be relabeled as the final Stage 1
 denominator.
@@ -242,7 +245,7 @@ The development-container host remained rootful Docker Desktop on Apple Silicon,
 native rootless x86_64 reference-host repetition remains pending. No provider or hosted
 runtime was used.
 
-## Fourth-batch trusted-local qualification
+## Fourth-batch development qualification
 
 Fixtures 014–017 add four more implementation and data-shape families:
 
@@ -278,9 +281,22 @@ self-bound
 records the exact image/build, source, patch, protocol, response, completion, and
 evaluation-binding identities. Its static verifier and opt-in live reproduction passed.
 
-The development-container host remained rootful Docker Desktop on Apple Silicon, so the
-cumulative fixtures 001–017 campaign and native rootless x86_64 reference-host
-repetition remain pending. No provider or hosted runtime was used.
+The separately committed
+[`stage1-local-batch-004-v1`](../campaigns/stage1-local-batch-004-v1.json) manifest then
+froze fixtures 001–017 into one explicit round with seeds 4001–4017 and zero retries. It
+ran from its exact detached, tracked-clean revision before report documentation was
+added. All 17/17 attempts were terminal, expected, replay-valid, and storage-clean: 238
+events, 17 model calls, zero recovery, zero infrastructure errors, and zero provider
+cost. A fresh reconciliation of the preserved raw state reproduced the complete report
+model and canonical bytes exactly. The
+[canonical Batch 004 campaign evidence](evidence/reliability-campaigns/2026-08-03-batch-004-local-calibration/README.md)
+binds the manifest, code, fixture trees, gold patches, schedule, budgets, terminal
+streams, and storage commitments.
+
+The development-container host remained rootful Docker Desktop on Apple Silicon, so
+native rootless x86_64 reference-host repetition remains pending. Seventeen campaign
+observations are calibration evidence, not the final 100-attempt denominator or a
+population-level reliability claim. No provider or hosted runtime was used.
 
 ## Batch protocol
 

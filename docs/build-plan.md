@@ -580,8 +580,11 @@ Run one deterministic task through a complete isolated lifecycle and reproduce t
   cumulative fixtures 001–013 campaign with 13/13 expected terminal results and zero
   infrastructure errors. Treat those 13 observations as breadth/calibration evidence
   only. Batch 004 now has fixtures 014–017 through both the three-repeat trusted-local
-  and rebuilt digest-pinned two-phase development-container gates. The separately frozen
-  cumulative fixtures 001–017 campaign remains the next acceptance step.
+  and rebuilt digest-pinned two-phase development-container gates, followed by a
+  separately frozen cumulative fixtures 001–017 campaign with 17/17 expected terminal
+  results and zero infrastructure errors. Treat those 17 observations as
+  breadth/calibration evidence only. Constructing and qualifying fixtures 018–020 is the
+  next corpus step.
 - Freeze the real normal-fixture campaign separately after all 20 distinct fixtures are
   accepted. Use five explicit round-major attempts per fixture, fixed attempt IDs and
   seeds, no hidden retry, and one report whose infrastructure-error numerator and
