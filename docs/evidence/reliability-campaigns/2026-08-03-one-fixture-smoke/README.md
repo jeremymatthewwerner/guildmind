@@ -43,7 +43,9 @@ grader, adversarial corpus, and gold patch.
 ## Invocation
 
 The run used local Python 3.12.13 through `uv` 0.11.2 on arm64 macOS 26.5.2. It made no
-provider calls and required no Docker or hosted service.
+provider calls and required no Docker or hosted service. Reproduction requires a clean
+checkout of implementation checkpoint `b2fbfc8`; the current evolving source is expected
+to fail the manifest's pre-dispatch code-identity check.
 
 ```bash
 uv run guildmind campaign run campaigns/stage1-local-smoke-v1.json \

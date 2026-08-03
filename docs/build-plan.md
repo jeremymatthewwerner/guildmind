@@ -563,7 +563,9 @@ Run one deterministic task through a complete isolated lifecycle and reproduce t
   repository-owned fixture. Reject unknown/duplicate fields, content drift, incomplete
   schedules, hidden retries, missing/nonterminal/undeclared/corrupt attempt evidence,
   derived-claim tampering, and existing report paths. Treat this smoke only as harness
-  evidence.
+  evidence. Keep historical manifests parseable and self-verifying after source
+  evolution, while requiring exact current code/fixture identity before dispatch or
+  reconciliation.
 - Add fixture breadth in separately frozen development batches before the final
   denominator. Batch 001 now qualifies fixtures 002–005 through three-repeat local and
   development-container pristine/gold matrices, then calibrates fixtures 001–005 through

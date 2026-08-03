@@ -71,7 +71,9 @@ not portable versioned evidence.
 
 ## Reproduction
 
-The recorded run used a detached clean worktree at the exact revision above. Generated
+The recorded run used a detached clean worktree at the exact revision above. Reproduction
+likewise requires that exact `fcf50a7` implementation checkpoint; the current evolving
+source is expected to fail the manifest's pre-dispatch code-identity check. Generated
 state and output paths were new, canonical real paths outside the repository:
 
 ```bash

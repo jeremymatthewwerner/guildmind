@@ -6,13 +6,14 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from guildmind.domain import ReliabilityCampaignManifest, sha256_bytes
+from guildmind.domain import ReliabilityCampaignManifest, canonical_sha256, sha256_bytes
 from guildmind.evaluation import LocalEvaluator
 from guildmind.runtime.campaign import (
     CampaignConfigurationError,
     campaign_code_source_sha256,
     campaign_fixture_tree_sha256,
     load_reliability_campaign,
+    load_reliability_campaign_manifest,
     load_reliability_campaign_report,
 )
 
@@ -300,24 +301,33 @@ def test_loader_rejects_fixture_changed_after_manifest_was_frozen(tmp_path: Path
         ("stage1-local-batch-001-v1.json", "stage1-local-batch-001-v1", 5),
     ],
 )
-def test_checked_in_campaign_manifest_matches_current_source_and_fixtures(
+def test_checked_in_campaign_manifest_is_a_valid_historical_contract(
     manifest_name: str,
     campaign_id: str,
     fixture_count: int,
 ) -> None:
-    campaign = load_reliability_campaign(
-        _REPOSITORY_ROOT / "campaigns" / manifest_name,
-        repository_root=_REPOSITORY_ROOT,
-    )
+    manifest_path = _REPOSITORY_ROOT / "campaigns" / manifest_name
+    manifest = load_reliability_campaign_manifest(manifest_path)
 
-    assert campaign.manifest.campaign_id == campaign_id
-    assert len(campaign.manifest.fixtures) == fixture_count
-    assert len(campaign.manifest.attempts) == fixture_count * campaign.manifest.rounds
-    assert campaign.manifest.code_source_sha256 == campaign_code_source_sha256(_REPOSITORY_ROOT)
-    for fixture in campaign.manifest.fixtures:
-        assert fixture.fixture_tree_sha256 == campaign_fixture_tree_sha256(
-            _REPOSITORY_ROOT / fixture.fixture_path
-        )
+    assert manifest.campaign_id == campaign_id
+    assert len(manifest.fixtures) == fixture_count
+    assert len(manifest.attempts) == fixture_count * manifest.rounds
+    assert manifest.content_sha256 == canonical_sha256(manifest)
+
+
+@pytest.mark.parametrize(
+    "manifest_name",
+    ["stage1-local-smoke-v1.json", "stage1-local-batch-001-v1.json"],
+)
+def test_checked_in_historical_manifest_cannot_run_after_source_drift(
+    manifest_name: str,
+) -> None:
+    manifest_path = _REPOSITORY_ROOT / "campaigns" / manifest_name
+    historical = load_reliability_campaign_manifest(manifest_path)
+    assert historical.code_source_sha256 != campaign_code_source_sha256(_REPOSITORY_ROOT)
+
+    with pytest.raises(CampaignConfigurationError, match="code source digest mismatch"):
+        load_reliability_campaign(manifest_path, repository_root=_REPOSITORY_ROOT)
 
 
 @pytest.mark.parametrize(
@@ -341,17 +351,14 @@ def test_checked_in_campaign_report_matches_its_source_manifest(
     attempt_count: int,
 ) -> None:
     manifest_path = _REPOSITORY_ROOT / "campaigns" / manifest_name
-    campaign = load_reliability_campaign(
-        manifest_path,
-        repository_root=_REPOSITORY_ROOT,
-    )
+    manifest = load_reliability_campaign_manifest(manifest_path)
     report = load_reliability_campaign_report(
         _REPOSITORY_ROOT / "docs" / "evidence" / "reliability-campaigns" / report_relative
     )
 
-    assert report.body.manifest == campaign.manifest
+    assert report.body.manifest == manifest
     assert report.body.source_manifest_sha256 == sha256_bytes(manifest_path.read_bytes())
-    assert report.body.campaign_manifest_sha256 == campaign.manifest.content_sha256
+    assert report.body.campaign_manifest_sha256 == manifest.content_sha256
     assert report.body.intended_attempt_count == attempt_count
     assert report.body.expected_attempt_count == attempt_count
     assert report.body.infrastructure_error_count == 0

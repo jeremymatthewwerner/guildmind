@@ -108,19 +108,9 @@ def load_reliability_campaign(
     """Load one closed campaign contract without creating campaign state."""
 
     repository = _canonical_real_directory(repository_root, label="repository root")
-    manifest = _canonical_existing_path(manifest_path, label="campaign manifest")
+    manifest, manifest_bytes, specification = _load_reliability_campaign_manifest(manifest_path)
     if not manifest.is_relative_to(repository):
         raise CampaignConfigurationError("campaign manifest must be inside the repository root")
-    manifest_bytes = _read_regular_file(
-        manifest,
-        label="campaign manifest",
-        max_bytes=_MANIFEST_MAX_BYTES,
-    )
-    raw_manifest = _strict_json_object(manifest_bytes, label="campaign manifest")
-    try:
-        specification = ReliabilityCampaignManifest.model_validate(raw_manifest)
-    except ValidationError as error:
-        raise CampaignConfigurationError(f"campaign manifest is invalid: {error}") from error
 
     observed_code_sha256 = campaign_code_source_sha256(repository)
     if observed_code_sha256 != specification.code_source_sha256:
@@ -190,6 +180,30 @@ def load_reliability_campaign(
         manifest=specification,
         fixtures=tuple(loaded_fixtures),
     )
+
+
+def load_reliability_campaign_manifest(path: Path) -> ReliabilityCampaignManifest:
+    """Load a historical manifest contract without asserting current source identity."""
+
+    _, _, manifest = _load_reliability_campaign_manifest(path)
+    return manifest
+
+
+def _load_reliability_campaign_manifest(
+    path: Path,
+) -> tuple[Path, bytes, ReliabilityCampaignManifest]:
+    manifest_path = _canonical_existing_path(path, label="campaign manifest")
+    manifest_bytes = _read_regular_file(
+        manifest_path,
+        label="campaign manifest",
+        max_bytes=_MANIFEST_MAX_BYTES,
+    )
+    raw_manifest = _strict_json_object(manifest_bytes, label="campaign manifest")
+    try:
+        specification = ReliabilityCampaignManifest.model_validate(raw_manifest)
+    except ValidationError as error:
+        raise CampaignConfigurationError(f"campaign manifest is invalid: {error}") from error
+    return manifest_path, manifest_bytes, specification
 
 
 def campaign_code_source_sha256(repository_root: Path) -> str:

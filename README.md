@@ -205,25 +205,17 @@ uv run guildmind recover interrupted-run --state-dir .guildmind
 uv run guildmind quarantine --state-dir .guildmind
 ```
 
-Run the frozen one-fixture development campaign into new state and report paths:
+The one- and five-fixture campaign manifests are immutable historical evidence. Their
+bound source revision deliberately differs from the evolving current checkout, so
+`campaign run` now rejects them rather than silently relabeling new code as an old
+campaign. Use the exact implementation checkpoint recorded in each linked evidence
+README for reproduction. The next runnable current-source contract will be a separately
+frozen cumulative Batch 002 manifest; existing manifests will not be edited.
 
-```bash
-mkdir -p runs/reliability-campaigns
-uv run guildmind campaign run campaigns/stage1-local-smoke-v1.json \
-  --repository-root . \
-  --state-dir runs/reliability-campaigns/stage1-local-smoke-v1-state \
-  --output runs/reliability-campaigns/stage1-local-smoke-v1-report.json
-
-# Or run the frozen five-fixture calibration with different new paths:
-uv run guildmind campaign run campaigns/stage1-local-batch-001-v1.json \
-  --repository-root . \
-  --state-dir runs/reliability-campaigns/stage1-local-batch-001-rerun-state \
-  --output runs/reliability-campaigns/stage1-local-batch-001-rerun-report.json
-```
-
-The command refuses an existing state or output path and uses no paid model provider.
-Exit 0 means the complete frozen harness verdict passed; exit 2 means a valid canonical
-report was produced but its gate failed; exit 1 is a configuration/evidence error.
+Campaign execution refuses an existing state or output path and uses no paid model
+provider. Exit 0 means the complete frozen harness verdict passed; exit 2 means a valid
+canonical report was produced but its gate failed; exit 1 is a configuration/evidence
+error.
 
 Export the public JSON Schemas or run the 100-repetition semantic determinism check:
 
