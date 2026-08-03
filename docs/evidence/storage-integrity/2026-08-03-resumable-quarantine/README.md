@@ -4,8 +4,9 @@
 **Implementation checkpoint:** commit containing this document<br>
 **Scope:** explicit local orphan-quarantine protocol, public CLI, and deterministic
 in-process interruption/fault regressions<br>
-**Stage 1 effect:** the protocol surface is implemented; its spawned-process kill and
-concurrency matrix is still open, so Stage 1 remains **NOT PASSED**
+**Stage 1 effect at this implementation checkpoint:** the protocol surface is implemented;
+its spawned-process kill and concurrency matrix was still open, so Stage 1 remained
+**NOT PASSED**
 
 ## Claim established
 
@@ -155,17 +156,23 @@ The additional declared skips are 27 existing container-image/reference-host cas
 one storage-integrity case where APFS rejected another invalid UTF-8 filename. These
 development counts are not the predeclared 99% normal-fixture campaign.
 
+## Subsequent process evidence
+
+The follow-up [quarantine process-crash and concurrency checkpoint](../2026-08-03-quarantine-process-crash/README.md)
+now covers the complete predeclared 16-prefix spawned-process `SIGKILL` matrix and six
+cooperating publisher/maintainer/resumer cases. Every interrupted prefix completes in a
+fresh process or is already durably complete, and a second fresh invocation preserves
+the completed evidence identity. This closes the local process/concurrency work that was
+open when this implementation checkpoint was recorded; it does not promote the result
+to power-loss or reference-host evidence.
+
 ## Evidence boundary and remaining work
 
-This checkpoint establishes code paths, record invariants, deterministic in-process
-interruption recovery, and public JSON result/denial surfaces. It does **not** yet
-establish the full process-crash claim in [ADR 0005](../../../decisions/0005-resumable-orphan-quarantine.md).
-The next checkpoint must use spawned processes, pipe-synchronized boundaries, and real
-`SIGKILL` to cover record publication, every rename/directory-sync/receipt window,
-multi-candidate progress, COMPLETE publication, ACTIVE removal, and lease release.
-
-It must also exercise cooperating publishers and two simultaneous resumers. Remaining
-separate nonclaims are:
+This implementation checkpoint establishes code paths, record invariants, deterministic
+in-process interruption recovery, and public JSON result/denial surfaces. The linked
+follow-up establishes the local process-crash and cooperating-process claims predeclared
+in [ADR 0005](../../../decisions/0005-resumable-orphan-quarantine.md). Remaining separate
+nonclaims are:
 
 - sudden power loss, storage-controller behavior, and network filesystems;
 - an actively hostile same-UID process that ignores `flock` or races pathnames;

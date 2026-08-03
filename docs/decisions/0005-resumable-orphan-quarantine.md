@@ -222,10 +222,12 @@ claim until those environments receive separate evidence.
 - **Quarantine every ownerless finding:** rejected because links, special files, and
   noncanonical entries do not satisfy the regular single-link move invariant.
 
-## Predeclared acceptance checks (not yet satisfied)
+## Acceptance checks
 
-The implementation and deterministic unit faults exercise the protocol, but the complete
-spawned-process, fault, concurrency, and reference-host proof below remains open.
+The implementation, deterministic unit faults, and local Darwin spawned-process matrix
+exercise the protocol and satisfy the development checks below. Native rootless x86_64
+Linux repetition remains open, so this is not reference-host proof. The exact development
+results are recorded in the [process-crash and concurrency evidence](../evidence/storage-integrity/2026-08-03-quarantine-process-crash/README.md).
 
 - Fresh top-level coordinator authorization is obtained only after exclusive lease
   acquisition; missing/invalid databases and every non-allowlisted finding cause zero

@@ -82,9 +82,12 @@ fence removal. Resume accepts exactly one of the planned source or destination a
 repair the post-rename/pre-receipt window without overwriting or deleting either side.
 
 The implementation and in-process interruption/fault regressions establish this protocol
-surface, not the complete crash claim. The spawned-process quarantine `SIGKILL` matrix,
-broader cooperating-process/open-process stress, remaining CAS publication kill points,
-power-loss testing, and rootless x86_64 reference-host repetition remain required.
+surface. A follow-up [local Darwin matrix](../evidence/storage-integrity/2026-08-03-quarantine-process-crash/README.md)
+covers all 16 predeclared quarantine `SIGKILL` prefixes plus six cooperating
+publisher/maintainer/resumer cases, fresh-process completion, and an identity-preserving
+second no-op. Broader open-process and hostile same-UID stress,
+remaining CAS publication kill points, power-loss testing, and rootless x86_64
+reference-host repetition remain required.
 
 ## Consequences
 
