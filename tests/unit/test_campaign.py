@@ -303,6 +303,11 @@ def test_loader_rejects_fixture_changed_after_manifest_was_frozen(tmp_path: Path
         ("stage1-local-batch-003-v1.json", "stage1-local-batch-003-v1", 13),
         ("stage1-local-batch-004-v1.json", "stage1-local-batch-004-v1", 17),
         ("stage1-local-batch-005-v1.json", "stage1-local-batch-005-v1", 20),
+        (
+            "stage1-local-normal-fixtures-v1.json",
+            "stage1-local-normal-fixtures-v1",
+            20,
+        ),
     ],
 )
 def test_checked_in_campaign_manifest_is_a_valid_contract(
@@ -317,6 +322,39 @@ def test_checked_in_campaign_manifest_is_a_valid_contract(
     assert len(manifest.fixtures) == fixture_count
     assert len(manifest.attempts) == fixture_count * manifest.rounds
     assert manifest.content_sha256 == canonical_sha256(manifest)
+
+
+def test_normal_fixture_campaign_freezes_round_major_20_by_5_schedule() -> None:
+    manifest_path = _REPOSITORY_ROOT / "campaigns" / "stage1-local-normal-fixtures-v1.json"
+    campaign = load_reliability_campaign(manifest_path, repository_root=_REPOSITORY_ROOT)
+    manifest = campaign.manifest
+
+    assert manifest.rounds == 5
+    assert manifest.retry_limit == 0
+    assert manifest.budget_limits.max_model_retries == 0
+    assert manifest.maximum_infrastructure_error_rate == 0.01
+    expected_schedule = tuple(
+        (
+            f"stage1-local-normal-fixtures-r{round_index + 1:03d}-fixture-{fixture_index + 1:03d}",
+            fixture.fixture_id,
+            round_index,
+            6001 + round_index * 20 + fixture_index,
+        )
+        for round_index in range(5)
+        for fixture_index, fixture in enumerate(manifest.fixtures)
+    )
+    observed_schedule = tuple(
+        (
+            attempt.attempt_id,
+            attempt.fixture_id,
+            attempt.round_index,
+            attempt.seed,
+        )
+        for attempt in manifest.attempts
+    )
+    assert observed_schedule == expected_schedule
+    assert len({attempt.attempt_id for attempt in manifest.attempts}) == 100
+    assert len({attempt.seed for attempt in manifest.attempts}) == 100
 
 
 @pytest.mark.parametrize(
