@@ -9,44 +9,21 @@ bounded `python-call-v1` contract, visible failure evidence, and sealed cases. I
 to distinguish harness failures from expected task outcomes across different input and
 algorithm shapes.
 
-The final development/reference campaign will contain 20 distinct fixtures × 5 explicit
-rounds = 100 attempts. That denominator gives an empirical infrastructure-error rate at
+The final local development campaign contains 20 distinct fixtures × 5 explicit rounds =
+100 attempts. That denominator gives an empirical infrastructure-error rate at
 one-percentage-point resolution. It does not prove that the underlying rate is below 1%;
 such a claim requires a separately preregistered confidence rule and more observations.
 
-Fixture 001 and the one-attempt campaign are accepted development harness evidence.
-Fixtures 002–005 now have committed fixture directories and have passed both the
-three-repeat trusted-local gate and the three-repeat two-phase development-container gate
-for their exact pristine controls and gold patches. A separately frozen five-fixture
-batch-calibration campaign also reconciled every attempt as expected with zero
-infrastructure errors. Fixtures 001–005 are therefore development-qualified; they still
-require inclusion in the final frozen schedule and native rootless x86_64 reference-host
-repetition. Fixtures 006–009 now have committed directories and exact controls and have
-passed both their three-repeat trusted-local pristine/gold gate and their three-repeat
-two-phase development-container gate. A separately committed cumulative campaign then
-reconciled all nine fixtures as expected with zero infrastructure errors. Fixtures
-001–009 are therefore development-qualified; they still require inclusion in the final
-frozen schedule and native rootless x86_64 reference-host repetition. Fixtures 010–013
-now have committed directories and exact controls and pass their three-repeat
-trusted-local pristine/gold gate and their three-repeat two-phase development-container
-gate. A separately committed cumulative campaign then reconciled all 13 fixtures as
-expected with zero infrastructure errors. Fixtures 001–013 are therefore
-development-qualified; they still require inclusion in the final frozen schedule and
-native rootless x86_64 reference-host repetition. Fixtures 014–017 now have committed
-directories and exact controls and pass their three-repeat trusted-local pristine/gold
-gate and their three-repeat two-phase development-container gate. A separately committed
-cumulative campaign then reconciled all 17 fixtures as expected with zero infrastructure
-errors. Fixtures 001–017 are therefore development-qualified; they still require
-inclusion in the final frozen schedule and native rootless x86_64 reference-host
-repetition. Fixtures 018–020 now have committed directories and exact controls and pass
-their three-repeat trusted-local pristine/gold gate and three-repeat two-phase
-development-container gate. A separately frozen cumulative campaign then reconciled all
-20 fixtures as expected with zero infrastructure errors. All 20 fixtures are therefore
-development-qualified; they still require the distinct five-round campaign and native
-rootless x86_64 reference-host repetition.
-Locally-qualified, development-qualified, or planned rows may not be counted in the final
-campaign denominator, and none of these calibrations may be relabeled as the final Stage 1
-denominator.
+Fixture 001 and its one-attempt campaign are accepted development-harness evidence.
+Fixtures 002–020 were added in five breadth batches. Every fixture's exact pristine
+control and gold patch passed three trusted-local and three two-phase
+development-container repetitions, and separately frozen cumulative campaigns reconciled
+5/5, 9/9, 13/13, 17/17, and 20/20 attempts as expected with zero infrastructure errors.
+The distinct five-round campaign then reconciled 100/100 attempts as expected with zero
+infrastructure errors. All 20 rows have therefore passed the local campaign gate; native
+rootless x86_64 reference-host repetition remains required. The one-round calibrations
+remain breadth evidence and may not be relabeled as either the 100-attempt result or the
+authoritative Stage 1 reference-host denominator.
 
 ## Anti-duplication and acceptance rules
 
@@ -75,26 +52,26 @@ A fixture is eligible only if all of the following hold:
 
 | ID | Callable | Primary semantic / bug class | Principal JSON shape | Key sealed discriminator | Status |
 |---|---|---|---|---|---|
-| 001 | `add(left, right)` | Signed scalar arithmetic; wrong operator | integer scalars | mixed signs and unbounded integer carry | Development-qualified; reference pending |
-| 002 | `slugify(text)` | Unicode-aware normalization and separator collapse | string | punctuation runs, outer separators, Unicode letters | Development-qualified; reference pending |
-| 003 | `merge_intervals(intervals)` | Ordering plus closed-integer interval coalescing | nested integer lists | unsorted containment, adjacency, negatives, empty input | Development-qualified; reference pending |
-| 004 | `resolve_pointer(document, pointer)` | Escaped-token traversal across maps and arrays | arbitrary nested JSON | RFC 6901 `~0`/`~1`, root pointer, empty key, list index | Development-qualified; reference pending |
-| 005 | `dedupe_by(records, key)` | Stable first-wins deduplication by structural JSON identity | list of objects | falsy, list-valued, and object-valued keys while preserving order | Development-qualified; reference pending |
-| 006 | `decode_runs(encoded)` | Stateful run-length parser with multi-digit counts | string → list/null | multi-digit runs, escaped literal separators, zero/invalid run policy | Development-qualified; reference pending |
-| 007 | `apportion(total, weights)` | Exact largest-remainder integer allocation and deterministic ties | integer + integer list | exact total, zero weights, index tie break, >53-bit values | Development-qualified; reference pending |
-| 008 | `topological_order(nodes, edges)` | Graph dependency resolution with stable ready-queue order | strings + edge pairs | disconnected graph, diamond, dynamic lexical tie, cycle result | Development-qualified; reference pending |
-| 009 | `apply_changes(document, changes)` | Ordered immutable-style nested state transformation | nested JSON + operations | root/nested set, delete/insert, order-sensitive list indexes | Development-qualified; reference pending |
-| 010 | `wrap_words(words, width)` | Greedy formatting with exact whitespace and overflow policy | string list + integer | exact-fit, oversized token, empty input, multiple lines | Development-qualified; reference pending |
-| 011 | `business_days(start, end, holidays)` | Date parsing and inclusive/exclusive calendar boundary | ISO strings + list | weekend endpoints, leap day, holiday/weekend overlap | Development-qualified; reference pending |
-| 012 | `parse_roman(text)` | Symbol parser with subtractive-pair validation | string | repeated symbols, legal subtraction, canonical rejection result | Development-qualified; reference pending |
-| 013 | `rotate_grid(grid)` | Rectangular matrix index transformation | nested lists | non-square matrix, one row/column, empty grid | Development-qualified; reference pending |
-| 014 | `summarize_transactions(rows)` | Filtered, grouped, stable aggregation | list of objects | refunds, missing categories, zero amounts, first-seen order | Development-qualified; reference pending |
-| 015 | `match_route(pattern, path)` | Tokenized path matching and parameter extraction | strings → object/null | literal precedence, repeated separators, percent text policy | Development-qualified; reference pending |
-| 016 | `backoff_schedule(base, factor, cap, attempts)` | Bounded deterministic recurrence | numeric scalars | cap crossing, zero attempts, nonintegral factor, no overshoot | Development-qualified; reference pending |
-| 017 | `inventory_delta(before, after)` | Multiset accounting rather than set difference | string lists → object | duplicates, removals/additions of same item, stable keys | Development-qualified; reference pending |
-| 018 | `latest_versions(records)` | Semantic-version precedence and stable record selection | list of objects | prerelease ordering, numeric components, equal-version first win | Development-qualified; final campaign/reference pending |
-| 019 | `redact_keys(value, blocked)` | Recursive shape-preserving transformation | arbitrary nested JSON | blocked keys below arrays/maps, empty containers, scalar root | Development-qualified; final campaign/reference pending |
-| 020 | `evaluate_rule(rule, facts)` | Recursive Boolean rule tree with explicit missing-fact policy | nested rule object + map | nested all/any/not, falsy facts, missing fact, empty identities | Development-qualified; final campaign/reference pending |
+| 001 | `add(left, right)` | Signed scalar arithmetic; wrong operator | integer scalars | mixed signs and unbounded integer carry | Local campaign passed; reference pending |
+| 002 | `slugify(text)` | Unicode-aware normalization and separator collapse | string | punctuation runs, outer separators, Unicode letters | Local campaign passed; reference pending |
+| 003 | `merge_intervals(intervals)` | Ordering plus closed-integer interval coalescing | nested integer lists | unsorted containment, adjacency, negatives, empty input | Local campaign passed; reference pending |
+| 004 | `resolve_pointer(document, pointer)` | Escaped-token traversal across maps and arrays | arbitrary nested JSON | RFC 6901 `~0`/`~1`, root pointer, empty key, list index | Local campaign passed; reference pending |
+| 005 | `dedupe_by(records, key)` | Stable first-wins deduplication by structural JSON identity | list of objects | falsy, list-valued, and object-valued keys while preserving order | Local campaign passed; reference pending |
+| 006 | `decode_runs(encoded)` | Stateful run-length parser with multi-digit counts | string → list/null | multi-digit runs, escaped literal separators, zero/invalid run policy | Local campaign passed; reference pending |
+| 007 | `apportion(total, weights)` | Exact largest-remainder integer allocation and deterministic ties | integer + integer list | exact total, zero weights, index tie break, >53-bit values | Local campaign passed; reference pending |
+| 008 | `topological_order(nodes, edges)` | Graph dependency resolution with stable ready-queue order | strings + edge pairs | disconnected graph, diamond, dynamic lexical tie, cycle result | Local campaign passed; reference pending |
+| 009 | `apply_changes(document, changes)` | Ordered immutable-style nested state transformation | nested JSON + operations | root/nested set, delete/insert, order-sensitive list indexes | Local campaign passed; reference pending |
+| 010 | `wrap_words(words, width)` | Greedy formatting with exact whitespace and overflow policy | string list + integer | exact-fit, oversized token, empty input, multiple lines | Local campaign passed; reference pending |
+| 011 | `business_days(start, end, holidays)` | Date parsing and inclusive/exclusive calendar boundary | ISO strings + list | weekend endpoints, leap day, holiday/weekend overlap | Local campaign passed; reference pending |
+| 012 | `parse_roman(text)` | Symbol parser with subtractive-pair validation | string | repeated symbols, legal subtraction, canonical rejection result | Local campaign passed; reference pending |
+| 013 | `rotate_grid(grid)` | Rectangular matrix index transformation | nested lists | non-square matrix, one row/column, empty grid | Local campaign passed; reference pending |
+| 014 | `summarize_transactions(rows)` | Filtered, grouped, stable aggregation | list of objects | refunds, missing categories, zero amounts, first-seen order | Local campaign passed; reference pending |
+| 015 | `match_route(pattern, path)` | Tokenized path matching and parameter extraction | strings → object/null | literal precedence, repeated separators, percent text policy | Local campaign passed; reference pending |
+| 016 | `backoff_schedule(base, factor, cap, attempts)` | Bounded deterministic recurrence | numeric scalars | cap crossing, zero attempts, nonintegral factor, no overshoot | Local campaign passed; reference pending |
+| 017 | `inventory_delta(before, after)` | Multiset accounting rather than set difference | string lists → object | duplicates, removals/additions of same item, stable keys | Local campaign passed; reference pending |
+| 018 | `latest_versions(records)` | Semantic-version precedence and stable record selection | list of objects | prerelease ordering, numeric components, equal-version first win | Local campaign passed; reference pending |
+| 019 | `redact_keys(value, blocked)` | Recursive shape-preserving transformation | arbitrary nested JSON | blocked keys below arrays/maps, empty containers, scalar root | Local campaign passed; reference pending |
+| 020 | `evaluate_rule(rule, facts)` | Recursive Boolean rule tree with explicit missing-fact policy | nested rule object + map | nested all/any/not, falsy facts, missing fact, empty identities | Local campaign passed; reference pending |
 
 ## First-batch local qualification
 
@@ -349,8 +326,27 @@ ambient main-worktree directory, which contained an unrelated untracked audio fi
 rather than the declared detached repository root. Independent content identities all
 verified. A subsequent regression fix now derives the revision from the declared
 repository, ignores unrelated untracked files, and rejects tracked drift before dispatch;
-the historical report remains unchanged. The final 20 × 5 campaign and reference-host
-repetition remain pending. No provider or hosted runtime was used.
+the historical report remains unchanged. No provider or hosted runtime was used.
+
+## Final local 100-attempt campaign
+
+The separately committed
+[`stage1-local-normal-fixtures-v1`](../campaigns/stage1-local-normal-fixtures-v1.json)
+manifest freezes five explicit round-major passes over fixtures 001–020, seeds 6001–6100,
+100 unique attempt IDs, a 1% observed-error threshold, and zero retries. It was committed
+and pushed before execution. All 100/100 attempts were terminal, expected, replay-valid,
+and storage-clean: 1,400 events, 100 scripted model calls, zero recovery, zero
+infrastructure errors, and zero provider cost. Fresh reconciliation of every preserved
+SQLite/CAS state reproduced the complete report model and canonical bytes exactly.
+
+The
+[canonical normal-fixture campaign evidence](evidence/reliability-campaigns/2026-08-03-stage1-local-normal-fixtures/README.md)
+binds the source manifest, exact clean Git revision, code, fixture trees, gold patches,
+schedule, budgets, terminal streams, and storage commitments. The observed 0/100 rate
+passes the declared local development gate. It does not prove an underlying rate below
+1%; even a simple independent-Bernoulli 95% one-sided upper bound is about 2.95%, and the
+repeated deterministic fixtures may have correlated failure modes. Native rootless
+x86_64 reference-host repetition remains pending.
 
 ## Batch protocol
 

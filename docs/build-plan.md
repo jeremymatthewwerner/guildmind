@@ -591,10 +591,12 @@ Run one deterministic task through a complete isolated lifecycle and reproduce t
   `+dirty` Git marker remains part of that historical report; a subsequent regression
   fix binds campaign revision discovery to the declared tracked-clean repository before
   the final schedule. Treat those 20 observations as breadth/calibration evidence only.
-- Freeze the real normal-fixture campaign separately after all 20 distinct fixtures are
-  accepted. Use five explicit round-major attempts per fixture, fixed attempt IDs and
-  seeds, no hidden retry, and one report whose infrastructure-error numerator and
-  100-attempt denominator are derived from complete reconciled evidence.
+- The separately frozen local normal-fixture campaign now uses five explicit round-major
+  attempts per fixture, fixed attempt IDs and seeds, no hidden retry, and one report whose
+  infrastructure-error numerator and 100-attempt denominator are derived from complete
+  reconciled evidence. All 100/100 local attempts reconciled as expected with zero
+  observed infrastructure errors. Treat this as a passed development gate, not a
+  population-level 99% proof or reference-host result.
 
 #### Exit gate
 
