@@ -36,6 +36,17 @@ _REPORTS = (
             "009-ordered-changes",
         ),
     ),
+    (
+        "2026-08-03-batch-003-development-container/report.json",
+        "stage1-fixture-batch-003",
+        "a39d03f8f8ca6b64fa53192c4828e45f8a4ab83c",
+        (
+            "010-word-wrap",
+            "011-business-days",
+            "012-roman-parser",
+            "013-grid-rotation",
+        ),
+    ),
 )
 _IMAGE_DIGEST = "31925a81fc6a21a82bcaf2370a6dfa20994a5427180fff8c0a3943d274e960d7"
 _IMAGE_REFERENCE = f"guildmind/evaluator@sha256:{_IMAGE_DIGEST}"

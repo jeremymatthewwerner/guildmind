@@ -575,9 +575,9 @@ Run one deterministic task through a complete isolated lifecycle and reproduce t
   digest-pinned two-phase development-container gates, followed by a separately frozen
   cumulative fixtures 001–009 campaign with 9/9 expected terminal results and zero
   infrastructure errors. Treat those nine observations as breadth/calibration evidence
-  only. Batch 003 now has fixtures 010–013 through the three-repeat trusted-local gate;
-  their exact development-container matrix and a new cumulative manifest are the next
-  acceptance steps.
+  only. Batch 003 now has fixtures 010–013 through both three-repeat trusted-local and
+  digest-pinned two-phase development-container gates. A new cumulative fixtures
+  001–013 manifest and campaign remain the next acceptance step.
 - Freeze the real normal-fixture campaign separately after all 20 distinct fixtures are
   accepted. Use five explicit round-major attempts per fixture, fixed attempt IDs and
   seeds, no hidden retry, and one report whose infrastructure-error numerator and

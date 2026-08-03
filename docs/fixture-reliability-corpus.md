@@ -28,8 +28,8 @@ reconciled all nine fixtures as expected with zero infrastructure errors. Fixtur
 001–009 are therefore development-qualified; they still require inclusion in the final
 frozen schedule and native rootless x86_64 reference-host repetition. Fixtures 010–013
 now have committed directories and exact controls and pass their three-repeat
-trusted-local pristine/gold gate; their two-phase development-container matrix and a new
-cumulative campaign remain pending. Rows 014–020 remain a construction plan.
+trusted-local pristine/gold gate and their three-repeat two-phase development-container
+gate; their new cumulative campaign remains pending. Rows 014–020 remain a construction plan.
 Locally-qualified, development-qualified, or planned rows may not be counted in the final
 campaign denominator, and neither calibration may be relabeled as the final Stage 1
 denominator.
@@ -70,10 +70,10 @@ A fixture is eligible only if all of the following hold:
 | 007 | `apportion(total, weights)` | Exact largest-remainder integer allocation and deterministic ties | integer + integer list | exact total, zero weights, index tie break, >53-bit values | Development-qualified; reference pending |
 | 008 | `topological_order(nodes, edges)` | Graph dependency resolution with stable ready-queue order | strings + edge pairs | disconnected graph, diamond, dynamic lexical tie, cycle result | Development-qualified; reference pending |
 | 009 | `apply_changes(document, changes)` | Ordered immutable-style nested state transformation | nested JSON + operations | root/nested set, delete/insert, order-sensitive list indexes | Development-qualified; reference pending |
-| 010 | `wrap_words(words, width)` | Greedy formatting with exact whitespace and overflow policy | string list + integer | exact-fit, oversized token, empty input, multiple lines | Locally qualified; development container pending |
-| 011 | `business_days(start, end, holidays)` | Date parsing and inclusive/exclusive calendar boundary | ISO strings + list | weekend endpoints, leap day, holiday/weekend overlap | Locally qualified; development container pending |
-| 012 | `parse_roman(text)` | Symbol parser with subtractive-pair validation | string | repeated symbols, legal subtraction, canonical rejection result | Locally qualified; development container pending |
-| 013 | `rotate_grid(grid)` | Rectangular matrix index transformation | nested lists | non-square matrix, one row/column, empty grid | Locally qualified; development container pending |
+| 010 | `wrap_words(words, width)` | Greedy formatting with exact whitespace and overflow policy | string list + integer | exact-fit, oversized token, empty input, multiple lines | Development-container qualified; campaign/reference pending |
+| 011 | `business_days(start, end, holidays)` | Date parsing and inclusive/exclusive calendar boundary | ISO strings + list | weekend endpoints, leap day, holiday/weekend overlap | Development-container qualified; campaign/reference pending |
+| 012 | `parse_roman(text)` | Symbol parser with subtractive-pair validation | string | repeated symbols, legal subtraction, canonical rejection result | Development-container qualified; campaign/reference pending |
+| 013 | `rotate_grid(grid)` | Rectangular matrix index transformation | nested lists | non-square matrix, one row/column, empty grid | Development-container qualified; campaign/reference pending |
 | 014 | `summarize_transactions(rows)` | Filtered, grouped, stable aggregation | list of objects | refunds, missing categories, zero amounts, first-seen order | Planned |
 | 015 | `match_route(pattern, path)` | Tokenized path matching and parameter extraction | strings → object/null | literal precedence, repeated separators, percent text policy | Planned |
 | 016 | `backoff_schedule(base, factor, cap, attempts)` | Bounded deterministic recurrence | numeric scalars | cap crossing, zero attempts, nonintegral factor, no overshoot | Planned |
@@ -190,7 +190,7 @@ is strict-schema and hash-bound and is reloaded by the repository test suite. Th
 the local campaign harness across nine semantic families. Nine observations are not the
 100-attempt Stage 1 denominator and do not establish a population reliability rate.
 
-## Third-batch local qualification
+## Third-batch local and development-container qualification
 
 Fixtures 010–013 add four further implementation and data-shape families:
 
@@ -210,13 +210,19 @@ produced three identical `tests_failed` results for every pristine control and t
 identical `passed` results for every gold patch: 24 trusted-local evaluations plus four
 direct visible-failure checks.
 
-The complete default repository gate passed 681 tests with 37 declared skips; Ruff
-reported 172 formatted files and no lint findings, and strict mypy passed across 83
-source files. The skips include the opt-in development/reference container cases, so
-this is deliberately local qualification. The exact bytes have not yet run through the
-two-phase development container, are not present in a frozen cumulative campaign, and
-have not run on the rootless x86_64 reference host. No provider or hosted runtime was
-used.
+The exact same controls and gold patches then ran three times apiece through the pinned
+two-phase development image. All 12 pristine results were stable `tests_failed`
+classifications, all 12 gold results were stable `passed` classifications, all six cases
+ran in every scorer, and there were no errors, skips, truncations, or residual managed
+containers. That adds 24 container results and 48 disposable candidate/scorer
+containers. The self-bound
+[Batch 003 report](evidence/fixture-qualification/2026-08-03-batch-003-development-container/README.md)
+records the exact source revision, image, patch, protocol, response, completion, and
+evaluation-binding identities. Its static verifier and opt-in live reproduction passed.
+
+The host remained rootful Docker Desktop on Apple Silicon, so the cumulative fixtures
+001–013 campaign and native rootless x86_64 reference-host repetition remain pending. No
+provider or hosted runtime was used.
 
 ## Batch protocol
 

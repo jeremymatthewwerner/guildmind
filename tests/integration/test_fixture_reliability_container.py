@@ -33,6 +33,14 @@ _SECOND_REPORT = (
     / "2026-08-03-batch-002-development-container"
     / "report.json"
 )
+_THIRD_REPORT = (
+    _REPOSITORY_ROOT
+    / "docs"
+    / "evidence"
+    / "fixture-qualification"
+    / "2026-08-03-batch-003-development-container"
+    / "report.json"
+)
 _FIRST_BATCH = (
     "002-slug-normalization",
     "003-interval-merge",
@@ -44,6 +52,12 @@ _SECOND_BATCH = (
     "007-apportionment",
     "008-topological-order",
     "009-ordered-changes",
+)
+_THIRD_BATCH = (
+    "010-word-wrap",
+    "011-business-days",
+    "012-roman-parser",
+    "013-grid-rotation",
 )
 
 
@@ -139,7 +153,7 @@ def _result_payload(result: LocalEvaluationResult) -> dict[str, object]:
 
 def _load_expected_outcome(fixture_name: str, outcome_name: str) -> dict[str, object]:
     expected_fixture_id = f"fixture-{fixture_name}"
-    for report_path in (_REPORT, _SECOND_REPORT):
+    for report_path in (_REPORT, _SECOND_REPORT, _THIRD_REPORT):
         report = cast(dict[str, object], json.loads(report_path.read_bytes()))
         fixture_entries = cast(list[object], report["fixtures"])
         for raw_entry in fixture_entries:
@@ -198,6 +212,14 @@ def test_first_fixture_batch_repeats_pristine_failure_and_gold_pass_in_container
 @pytest.mark.container
 @pytest.mark.parametrize("fixture_name", _SECOND_BATCH)
 def test_second_fixture_batch_repeats_pristine_failure_and_gold_pass_in_container(
+    fixture_name: str,
+) -> None:
+    _assert_fixture_repeats_pristine_failure_and_gold_pass_in_container(fixture_name)
+
+
+@pytest.mark.container
+@pytest.mark.parametrize("fixture_name", _THIRD_BATCH)
+def test_third_fixture_batch_repeats_pristine_failure_and_gold_pass_in_container(
     fixture_name: str,
 ) -> None:
     _assert_fixture_repeats_pristine_failure_and_gold_pass_in_container(fixture_name)
