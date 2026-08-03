@@ -147,7 +147,10 @@ temporary remains an exact typed audit finding across two retries while the firs
 publishes one canonical blob and the second preserves its inode. Together with this
 checkpoint's pre-publication case—which is after file `fsync`, close, and byte/identity
 verification—the local CAS publication process-crash sequence is covered from temporary
-creation through final directory sync. Real-process competing-publisher stress,
+creation through final directory sync. The later
+[same-digest publisher-contention checkpoint](../2026-08-03-cas-publisher-contention/README.md)
+closes the bounded cooperative low-level competing-publisher race with eight persistent
+processes across 20 unique digest/shard rounds. Runtime-level and hostile contention,
 power-loss durability, and rootless x86_64 reference-host repetition remain separate.
 
 ## Evidence boundary

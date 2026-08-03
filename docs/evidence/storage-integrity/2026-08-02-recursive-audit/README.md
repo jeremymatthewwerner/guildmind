@@ -208,6 +208,9 @@ post-rename/pre-receipt window. The later
 [quarantine process matrix](../2026-08-03-quarantine-process-crash/README.md) completes
 the local spawned-process `SIGKILL` and cooperating-process cases, while the
 [CAS temporary-write matrix](../../crash-recovery/2026-08-03-cas-temporary-write/README.md)
-completes the local CAS write-prefix kills. Hostile same-UID races, power loss,
-real-process CAS publisher contention, provider behavior, reference-host repetition,
-and the 99% campaign remain, so Stage 1 is still **NOT PASSED**.
+completes the local CAS write-prefix kills. The subsequent bounded
+[same-digest publisher-contention matrix](../../crash-recovery/2026-08-03-cas-publisher-contention/README.md)
+also completes 160 cooperative low-level puts with one canonical winner per round and
+exact loser cleanup. Hostile same-UID and broader runtime races, power loss, provider
+behavior, reference-host repetition, and the 99% campaign remain, so Stage 1 is still
+**NOT PASSED**.

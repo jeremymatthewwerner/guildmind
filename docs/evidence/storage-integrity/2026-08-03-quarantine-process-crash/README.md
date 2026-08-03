@@ -217,15 +217,19 @@ required atomic no-replace primitive remain outside the claim.
 
 The subsequent [CAS temporary-write checkpoint](../../crash-recovery/2026-08-03-cas-temporary-write/README.md)
 closes the local temporary-create, partial-write, and file-`fsync` kill points that were
-open when this matrix was first recorded. The remaining Stage 1 gaps include:
+open when this matrix was first recorded. The later bounded
+[same-digest publisher-contention checkpoint](../../crash-recovery/2026-08-03-cas-publisher-contention/README.md)
+also passes eight persistent processes across 20 unique digest/shard rounds, totaling
+160 cooperative low-level puts with one canonical winner and exact loser cleanup. The
+remaining Stage 1 gaps include:
 
 - running this complete matrix, with repetition, on the dedicated native rootless
   x86_64 Linux reference host and preserving host/filesystem evidence;
-- real-process concurrent CAS publisher stress;
 - separate credible sudden-power-loss/storage-fault evidence if that stronger
   durability claim is required;
 - hostile same-UID and already-open-descriptor races, which require a stronger isolation
   boundary rather than more cooperative lease cases;
+- broader runtime/open-process concurrency beyond the trusted low-level CAS primitive;
 - real-provider idempotency, status polling, duplicate suppression, and billing
   reconciliation; and
 - the planned fixture breadth, general hostile-code containment on the reference host,

@@ -5,8 +5,8 @@ POSIX `SIGKILL`<br>
 **Scope:** `FileArtifactStore` temporary creation, partial write, and pre-file-`fsync`
 process-crash seams<br>
 **Stage 1 effect:** closes the three previously missing local CAS temporary-write kill
-points; concurrent real-process publishers and reference-host validation remain open,
-so Stage 1 is still **NOT PASSED**
+points; the subsequent bounded cooperative same-digest publisher matrix also passed,
+while reference-host validation remains open, so Stage 1 is still **NOT PASSED**
 
 ## Claim established
 
@@ -218,18 +218,19 @@ rootless x86_64 Linux reference host, unusual local filesystems, or network file
 The checked pathname and no-follow identity controls also remain a cooperative local
 integrity boundary, not protection against an actively racing hostile same-UID process.
 
-Concurrent real-process CAS publishers remain the next bounded publication checkpoint.
-The independent review recommends predeclaring, rather than retrofitting after results,
-an initial stress of eight persistent spawned workers over 20 distinct digest rounds.
-For each round, all eight workers would contend on the same digest after reaching a fully
-file-`fsync`ed and verified pre-rename gate, then stop again immediately after the real
-no-replace result but before loser cleanup. The assertions should require exactly one
-winner, seven still-unchanged losing temporaries at that observation point, preservation
-of the winning inode, exact loser cleanup after release, no residual temporaries, and an
-exact final audit. The 8×20 size is a review recommendation, not a statistically derived
-threshold and not evidence already run.
+The subsequent
+[same-digest publisher-contention checkpoint](../2026-08-03-cas-publisher-contention/README.md)
+executes the predeclared stress: eight persistent spawned workers over 20 distinct
+digest/shard rounds, totaling 160 cooperative low-level puts. Every round gates all
+workers at the fully file-`fsync`ed and verified pre-rename boundary, then again after
+the real no-replace result but before loser cleanup. Exactly one call wins, the other
+seven temporaries retain their complete identities until release, the canonical keeps
+the winning inode, all eight calls return the same reference, cleanup leaves no
+temporary, and the final audit equals exactly 20 valid-finalized findings. Five
+consecutive stabilized repetitions passed. The 8×20 size remains a bounded predeclared
+matrix, not a statistically derived reliability threshold.
 
-That future low-level same-digest race would still not cover hostile same-UID insertion
+That bounded low-level same-digest race does not cover hostile same-UID insertion
 or pathname replacement, corrupt-target attack composition, hash collisions, winner
 death, power loss, or network filesystems. A runtime-level concurrency claim would also
 need the workers to traverse the supported shared-maintenance-lease publication entry

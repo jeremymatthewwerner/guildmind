@@ -135,11 +135,11 @@ participating in the lease protocol.
 
 - The subsequent [resumable quarantine](../../storage-integrity/2026-08-03-resumable-quarantine/README.md),
   [quarantine process matrix](../../storage-integrity/2026-08-03-quarantine-process-crash/README.md),
-  and [CAS temporary-write matrix](../2026-08-03-cas-temporary-write/README.md) close
-  the local protocol, quarantine-move, and remaining CAS write-prefix items that were
-  open at this checkpoint.
-- Stress real-process CAS publisher contention, hostile same-UID actors, and broader
-  open-process recovery races.
+  [CAS temporary-write matrix](../2026-08-03-cas-temporary-write/README.md), and bounded
+  [same-digest publisher-contention matrix](../2026-08-03-cas-publisher-contention/README.md)
+  close the local protocol, quarantine-move, CAS write-prefix, and cooperative low-level
+  publication-race items that were open at this checkpoint.
+- Stress hostile same-UID actors and broader runtime/open-process recovery races.
 - Exercise real-provider idempotency, status polling, SDK retry suppression,
   duplicate-execution treatment, and invoice/usage reconciliation.
 - Repeat the complete sandbox, evaluator, resource, containment, and recovery matrix on

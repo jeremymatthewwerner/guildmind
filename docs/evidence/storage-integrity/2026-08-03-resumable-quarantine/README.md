@@ -171,16 +171,18 @@ to power-loss or reference-host evidence.
 This implementation checkpoint establishes code paths, record invariants, deterministic
 in-process interruption recovery, and public JSON result/denial surfaces. The linked
 follow-up establishes the local process-crash and cooperating-process claims predeclared
-in [ADR 0005](../../../decisions/0005-resumable-orphan-quarantine.md). Remaining separate
-nonclaims are:
+in [ADR 0005](../../../decisions/0005-resumable-orphan-quarantine.md). The later
+[CAS temporary-write](../../crash-recovery/2026-08-03-cas-temporary-write/README.md) and
+bounded [same-digest publisher-contention](../../crash-recovery/2026-08-03-cas-publisher-contention/README.md)
+checkpoints close the local write-prefix kills and cooperative low-level publisher race;
+they do not establish runtime-level or hostile contention. Remaining separate nonclaims
+are:
 
 - sudden power loss, storage-controller behavior, and network filesystems;
 - an actively hostile same-UID process that ignores `flock` or races pathnames;
 - revocation of descriptors that another process already opened;
 - deletion, garbage collection, secure erasure, or automatic startup quarantine;
-- real-process concurrent CAS publisher stress (the temporary-create/partial-write/
-  file-`fsync` kills now have a separate
-  [local checkpoint](../../crash-recovery/2026-08-03-cas-temporary-write/README.md)); and
+- broader runtime/open-process concurrency; and
 - native rootless x86_64 Linux reference-host validation.
 
 No external repository, arbitrary model-generated command, provider-backed pilot,
