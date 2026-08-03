@@ -1,13 +1,11 @@
 # Guildmind Pause-Point Handoff — 2026-08-03
 
-**Natural pause:** after the local Stage 1 storage, recovery, quarantine, and
-same-digest CAS contention checkpoints, plus a statically verified reliability-campaign
-evidence scaffold<br>
-**Functional checkpoint:** `c09e098` (`Stress concurrent CAS publishers`) on `main`<br>
-**Saved scaffold checkpoint:** `b668456` (`Scaffold reliability campaign evidence
-contract`) on `main`<br>
-**Repository gate:** 634 passed, 29 declared skips; 110 files formatted; Ruff and strict
-mypy clean across 75 source files<br>
+**Natural pause:** after the local Stage 1 storage, recovery, quarantine, same-digest CAS
+contention, and one-fixture reliability-campaign harness checkpoints<br>
+**Functional checkpoint:** `b2fbfc8` (`Add frozen reliability campaign runner`) on
+`main`<br>
+**Repository gate:** 658 passed, 29 declared skips; 113 files formatted; Ruff and strict
+mypy clean across 77 source files<br>
 **Overall verdict:** useful local development substrate; authoritative Stage 1 gate
 still **NOT PASSED**
 
@@ -26,11 +24,12 @@ have not passed the required rootless x86_64 Linux reference-host gate. External
 hostile repositories, arbitrary model-generated commands, paid model-provider pilots,
 institution search, and later research stages therefore remain intentionally blocked.
 
-This is a clean stopping point. The storage-contention checkpoint is implemented,
-documented, independently reviewed, committed, and pushed. A first campaign evidence
-contract and internal runtime scaffold are also saved and statically clean, but they are
-not CLI-wired or directly tested and have not executed a campaign. They are explicitly a
-resume point, not new reliability evidence.
+This is a clean stopping point. The reliability-campaign contract is now executable
+through a narrow development-only CLI, directly tested across success and negative
+evidence paths, and exercised by one checked-in content-bound manifest. Its first
+canonical report reconciles one expected terminal result and zero infrastructure errors.
+That accepts the harness, not the Stage 1 reliability gate: the planned 20-fixture ×
+5-round campaign and reference-host repetition remain undone.
 
 ## What has been built
 
@@ -175,10 +174,9 @@ See the [atomic-publication evidence](../evidence/crash-recovery/2026-08-03-atom
 [temporary-write matrix](../evidence/crash-recovery/2026-08-03-cas-temporary-write/README.md),
 and [publisher-contention matrix](../evidence/crash-recovery/2026-08-03-cas-publisher-contention/README.md).
 
-### 7. Reliability-campaign evidence scaffold
+### 7. Reliability-campaign harness and one-fixture smoke
 
-The pause-point scaffold now preserves the main contract decisions in code instead of
-only in planning notes:
+The campaign layer now preserves and executes the main contract decisions:
 
 - strict immutable manifest, attempt, terminal-evidence, and hash-bound report models;
 - a complete round-major schedule with unique fixture and attempt identities, zero
@@ -188,17 +186,27 @@ only in planning notes:
 - two newly exported public JSON Schemas for the campaign manifest and report;
 - an internal strict JSON/fixture loader with content-bound code, fixture-tree, task, and
   gold-patch checks; and
-- an internal development-only executor/reconciler draft that isolates attempt state,
-  audits ledger/CAS evidence, verifies replay and terminal identity, and publishes
-  canonical evidence with no-replace semantics.
+- a development-only executor/reconciler that isolates attempt state, audits ledger/CAS
+  evidence twice around readback, verifies replay and terminal identity, and publishes
+  canonical evidence with no-replace semantics; and
+- a narrow `guildmind campaign run` command with pre-dispatch output refusal, exit 0 for
+  a passed harness, exit 2 for a valid failed gate, and exit 1 for configuration or
+  evidence failure.
 
 The scaffold is in
 [the campaign domain module](../../src/guildmind/domain/campaign.py) and
-[the internal campaign runtime](../../src/guildmind/runtime/campaign.py). The full
-repository gate passes, and the two identity hash functions were smoke-invoked locally.
-There is deliberately no sample campaign manifest, CLI command, targeted campaign test
-suite, or recorded campaign result yet. Until those exist, this code must not be described
-as a working campaign runner or as evidence for the 99% gate.
+[the campaign runtime](../../src/guildmind/runtime/campaign.py). The checked-in
+[one-fixture manifest](../../campaigns/stage1-local-smoke-v1.json) binds the current code,
+fixture tree, gold patch, evaluator/environment, fake model, budget, seed, single attempt,
+and zero retries. Twenty-four focused tests cover malformed contracts, content drift,
+report tampering, execution recovery, budget refusal, missing/nonterminal/undeclared and
+corrupt evidence, and CLI publication semantics.
+
+The first [development smoke](../evidence/reliability-campaigns/2026-08-03-one-fixture-smoke/README.md)
+passed 1/1 intended attempt with an `expected` disposition, a 14-event replay-valid
+terminal stream, clean verified storage, and zero provider cost. This is a working
+one-fixture harness. It is deliberately not described as the 100-attempt normal-fixture
+campaign or as evidence for a population-level 99% claim.
 
 ## What works now
 
@@ -216,10 +224,10 @@ uv run guildmind doctor
 The last full gate reported:
 
 ```text
-ruff format --check: 110 files already formatted
+ruff format --check: 113 files already formatted
 ruff check: all checks passed
-mypy: 75 source files, no issues found
-pytest: 634 passed, 29 skipped in 14.28s
+mypy: 77 source files, no issues found
+pytest: 658 passed, 29 skipped in 15.63s
 ```
 
 The 29 skips are declared Docker-image/reference-host and two local-filesystem edge cases;
@@ -263,8 +271,19 @@ make determinism
 ```
 
 The schema export now includes `ReliabilityCampaignManifest` and
-`ReliabilityCampaignReport`. That means consumers can validate the frozen data shapes;
-it does not mean a campaign can yet be launched from the CLI.
+`ReliabilityCampaignReport`. A frozen development campaign can now be launched into new
+state and report paths:
+
+```bash
+mkdir -p runs/reliability-campaigns
+uv run guildmind campaign run campaigns/stage1-local-smoke-v1.json \
+  --repository-root . \
+  --state-dir runs/reliability-campaigns/stage1-local-smoke-v1-state \
+  --output runs/reliability-campaigns/stage1-local-smoke-v1-report.json
+```
+
+The scripted model has no paid provider dependency. Repeating the command requires new
+state and output paths; neither existing evidence path is overwritten.
 
 Docker is optional for the container evaluator and active probes. No cloud runtime,
 Kubernetes cluster, hosted database, queue, or managed agent service is needed now.
@@ -276,10 +295,10 @@ that is a Docker licensing question, not a Guildmind deployment dependency.
 
 - The repository has one fixture, one gold patch, and five known cases—not the planned
   20-fixture reliability corpus.
-- The reliability-campaign data contract and an internal runtime scaffold now exist, but
-  there is no checked-in campaign manifest, CLI integration, targeted unit/integration
-  suite, executed smoke campaign, or durable campaign evidence artifact. The internal
-  executor has not been accepted as operational.
+- The campaign harness currently covers only one fixture, one round, the scripted patch
+  model, and trusted local evaluation. It does not yet support the container evaluator,
+  resume an interrupted aggregate campaign, or constitute the planned reliability
+  denominator.
 - The 100-run determinism command is not a fixture-reliability campaign and must not be
   relabeled as one.
 - The rootless x86_64 Linux reference-host gate has not run. `guildmind doctor` correctly
@@ -300,35 +319,25 @@ that is a Docker licensing question, not a Guildmind deployment dependency.
 
 ## Exact next step
 
-Finish and validate the saved campaign scaffold before adding more fixtures or making a
-99% claim:
+Build fixture breadth without changing the accepted smoke or making a 99% claim:
 
-1. Add focused model/loader tests for unknown or duplicate fields, duplicate fixture
-   paths and IDs, invalid or incomplete schedules, unsafe paths, changed code/fixture
-   bytes, retry attempts, and reference-tier/local-evaluator mismatches.
-2. Exercise and review the internal executor/reconciler, including ordinary execution
-   exceptions, budget refusal, missing/duplicate/nonterminal runs, replay corruption,
-   identity mismatch, and write-once publication.
-3. Add a checked-in one-fixture development manifest whose code, fixture tree, gold
-   patch, evaluator, budget, seed, and single attempt are content-bound.
-4. Expose a narrow `guildmind campaign run` command that checks output availability
-   before dispatch and produces one canonical report, with a nonzero exit for a valid
-   failed gate and no hidden retry.
-5. Run and preserve the one-attempt smoke with targeted tests and a full repository gate.
-   Document explicitly that it is harness evidence, not the 100-attempt campaign and not
-   proof of an underlying 99% reliability rate.
-
-After that checkpoint:
-
-1. add 19 distinct known-outcome micro-fixtures in reviewed batches;
-2. prove each pristine fixture fails and its gold patch passes locally and in the
-   two-phase container evaluator;
-3. freeze a 20-fixture × 5-round schedule (100 declared attempts) for an empirical
-   one-percentage-point infrastructure-error denominator;
-4. run that exact manifest in development without changing its denominator or retry rule;
-5. rerun the exact campaign and all containment/recovery matrices on the dedicated
-   rootless x86_64 reference host; and
-6. preserve the resulting canonical evidence and update the Stage 1 verdict.
+1. Freeze a reviewed fixture-family matrix for the remaining 19 distinct known-outcome
+   micro-fixtures, preventing twenty cosmetic variants of the same arithmetic bug.
+2. Add the first small batch as new immutable fixture directories. For every fixture,
+   prove the pristine workspace fails, the gold patch passes, patch paths and byte limits
+   are tight, and the sealed cases discriminate plausible wrong implementations.
+3. Exercise that batch through trusted local evaluation and the existing two-phase
+   container evaluator in development; record container evidence separately from local
+   harness results.
+4. Create a new batch-calibration campaign manifest rather than modifying
+   `stage1-local-smoke-v1`; keep exact fixture/code/evaluator identities, fixed seeds,
+   zero retries, and an explicit denominator.
+5. Repeat in reviewed batches until 20 distinct fixtures are accepted, then freeze a
+   separate 20-fixture × 5-round schedule (100 declared attempts) for an empirical
+   one-percentage-point infrastructure-error denominator.
+6. Run that exact manifest in development without changing its denominator or retry
+   rule, then repeat it and all containment/recovery matrices on the dedicated rootless
+   x86_64 reference host. Preserve canonical evidence and update the Stage 1 verdict.
 
 A 100-attempt result is an empirical gate, not proof that an underlying population
 reliability exceeds 99%. Any stronger statistical claim needs its own preregistered
@@ -360,7 +369,6 @@ make check
 uv run guildmind doctor
 ```
 
-Then continue only the campaign test/CLI/one-fixture smoke checkpoint described above.
-Do not start provider-backed experiments, generate 19 fixtures before the scaffold is
-validated end to end, or rent a reference host before the attempt/evidence format is
-frozen by an accepted smoke.
+Then continue with the fixture-family matrix and first reviewed fixture batch described
+above. Do not start provider-backed experiments, jump straight to an unreviewed set of 19
+fixtures, or rent a reference host before the 20-fixture campaign is frozen.

@@ -117,12 +117,14 @@ Guildmind now has its first deterministic local vertical slice. It can:
   environment, credential, and network/socket boundaries with versioned evidence; and
 - verify the event chain, reconstruct terminal state, and compare normalized semantic digests across runs.
 
-A pause-point campaign scaffold additionally defines a frozen full-factorial schedule,
+The reliability-campaign path now defines a frozen full-factorial schedule,
 content-bound fixture/code/evaluator identities, zero-retry attempts, derived aggregate
-claims, and a hash-bound canonical report. Its internal loader/executor/reconciler is
-saved for the next session, but it is not yet exposed through the CLI, directly tested,
-or accepted as operational campaign evidence. See the
-[current handoff](docs/progress/2026-08-03-pause-point.md) for that exact boundary.
+claims, and a hash-bound canonical report. A strict loader, development-only
+executor/reconciler, and `guildmind campaign run` command have passed focused malformed,
+failure, recovery, tampering, and no-overwrite cases. The first checked-in one-fixture
+smoke reconciled one expected terminal result with zero infrastructure errors. This is
+harness evidence, not the planned 100-attempt campaign and not proof of a 99% population
+reliability claim; see the [campaign evidence](docs/evidence/reliability-campaigns/2026-08-03-one-fixture-smoke/README.md).
 
 The current Stage 1 hardening checkpoint adds a restricted Docker invocation contract, a pinned image-owned two-phase evaluator, crash recovery that closes an abandoned nonterminal run with explicit terminal evidence, and a read-only ledger/CAS integrity audit. Eleven real-process tests use pipe-synchronized boundaries and `SIGKILL` to cover five post-commit EventStore prefixes, four selected pre-commit rollback points, and the model-in-flight and evaluator-in-flight FixtureRunner boundaries. CAS publication now uses atomic platform-native no-replace rename; six synchronized Darwin kills cover the root, `sha256`, and shard `mkdir`-before-parent-`fsync` boundaries plus immediately before rename, immediately after rename, and after rename before directory `fsync`. Three further kills cover temporary creation, a flushed proper-prefix write, and the full write immediately before file `fsync`; exact stranded temporaries remain auditable across two idempotent retries. Explicit recovery acquires a cooperative shared maintenance lease before its fresh existing-only audit, checks the complete ledger and recursively reachable CAS bytes under the SQLite writer lock before staging, checks them again at the final pre-commit boundary, and returns the terminal event stream captured inside that transaction. Fixture publication holds the same shared lease through its final SQLite binding, while exclusive mode is reserved for state-wide maintenance and a present `quarantine/v1/ACTIVE` fence blocks mutation. Shared recovery is not quiescent against another shared publisher; it is safe for its narrower terminalization action because it never acts on ownerless findings and revalidates the complete ledger/reachable-CAS graph under the writer lock. Explicit quarantine instead holds exclusive mode, obtains its own fresh top-level audit, accepts only the complete allowlisted set of ownerless valid-finalized, corrupt-finalized, or temporary regular files, and revalidates each pending source before a descriptor-relative no-replace move. A canonical BEFORE/PLAN/ACTIVE chain precedes moves; deterministic receipts and AFTER/COMPLETE evidence precede fence removal. Restart can repair the ambiguous post-rename/pre-receipt window but fails closed if both or neither planned name exists. FixtureRunner exceptions after run creation use the guarded recovery path; pre-dispatch budget refusal uses the same dual guard, while a later budget error receives conservative general recovery. Successful evaluation completion also returns its terminal manifest/events from inside its write transaction, and SQLite writer failures become stable recovery denials. `replay` and `report` open existing state read-only and create nothing when it is absent. A missing, non-directory, or symlinked state leaf remains no-create. Any existing real state directory with a usable lock path—including empty or damaged storage, an unknown run, or an ACTIVE fence—may gain and synchronize the persistent coordination lock before later classification or denial. Six cooperating-process concurrency cases now cover publishers, an exclusive maintainer, a durable ACTIVE fence, overlapping resumers, and the post-unfence/pre-release lease window. Sixteen additional pipe-synchronized `SIGKILL` cases cover the quarantine record, move, receipt, completion, fence-removal, and lease-release prefixes, followed by fresh-process completion and a second identity-preserving no-op. A deterministic same-digest matrix additionally gates eight persistent spawned publishers before and after the real no-replace syscall across 20 unique digest/shard rounds: all 160 low-level puts converge on one winner per round, seven identity-exact losers before cleanup, eight identical references afterward, no residual temporary, and an exact 20-finding final audit. These remain bounded development controls: hostile same-UID concurrency, power-loss durability, reference-host repetition, and general hostile-code containment have not passed.
 
@@ -175,6 +177,20 @@ uv run guildmind recover interrupted-run --state-dir .guildmind
 uv run guildmind quarantine --state-dir .guildmind
 ```
 
+Run the frozen one-fixture development campaign into new state and report paths:
+
+```bash
+mkdir -p runs/reliability-campaigns
+uv run guildmind campaign run campaigns/stage1-local-smoke-v1.json \
+  --repository-root . \
+  --state-dir runs/reliability-campaigns/stage1-local-smoke-v1-state \
+  --output runs/reliability-campaigns/stage1-local-smoke-v1-report.json
+```
+
+The command refuses an existing state or output path and uses no paid model provider.
+Exit 0 means the complete frozen harness verdict passed; exit 2 means a valid canonical
+report was produced but its gate failed; exit 1 is a configuration/evidence error.
+
 Export the public JSON Schemas or run the 100-repetition semantic determinism check:
 
 ```bash
@@ -215,6 +231,7 @@ overwrite an existing report.
 - [Unsafe-patch intake evidence](docs/evidence/patch-intake/2026-08-02-development/README.md): the nine-case pre-application matrix, parser hardening, hashes, and evidence limits.
 - [Resource-probe evidence](docs/evidence/resource-probes/2026-08-02-docker-desktop/README.md): three canonical development reports for OOM, PID, writable-byte, and cleanup enforcement.
 - [Containment-probe evidence](docs/evidence/containment-probes/2026-08-02-docker-desktop/README.md): three canonical evaluator candidate/scorer reports for planted-secret, mount/environment, credential, network/socket, privilege, and cleanup boundaries.
+- [One-fixture reliability-campaign smoke](docs/evidence/reliability-campaigns/2026-08-03-one-fixture-smoke/README.md): the first content-bound, zero-retry CLI campaign and canonical report, with explicit one-attempt/statistical/reference-host limits.
 - [Real-process crash-recovery evidence](docs/evidence/crash-recovery/2026-08-02-process-sigkill/README.md): eleven synchronized `SIGKILL` cases across committed lifecycle, selected pre-commit, and runner external-work boundaries, with exact rollback/orphan observations and remaining gaps.
 - [Atomic no-replace CAS publication](docs/evidence/crash-recovery/2026-08-03-atomic-cas-publication/README.md): Darwin no-replace publication, six exact synchronized `SIGKILL` boundaries, a narrow Linux/arm64 syscall smoke, and explicit power-loss/reference-host limits.
 - [CAS temporary-write process-crash evidence](docs/evidence/crash-recovery/2026-08-03-cas-temporary-write/README.md): three exact pre-publication `SIGKILL` boundaries, typed stranded temporaries, two-retry identity preservation, and explicit process-crash/power-loss limits.

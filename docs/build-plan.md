@@ -527,9 +527,11 @@ Run one deterministic task through a complete isolated lifecycle and reproduce t
 - A scripted fake model for zero-cost deterministic tests.
 - Rootless Docker sandbox with no network, read-only base filesystem, dropped capabilities, bounded CPU/memory/processes/disk/output/time, and no host secrets.
 - Separate evaluator that applies a patch to a fresh image and emits a result.
-- Initial CLI: `doctor`, `run`, `evaluate`, `replay`, `report`, and explicit guarded
-  `recover`. Recovery and inspection open only existing storage; missing or invalid
-  state is a typed denial, never an instruction to initialize it.
+- Initial CLI: `doctor`, `run`, `evaluate`, `replay`, `report`, explicit guarded
+  `recover`, and development-only `campaign run`. Recovery and inspection open only
+  existing storage; missing or invalid state is a typed denial, never an instruction to
+  initialize it. Campaign execution requires a complete content-bound schedule, zero
+  retries, new isolated state, and a new write-once canonical report.
 
 #### Verification
 
@@ -557,6 +559,15 @@ Run one deterministic task through a complete isolated lifecycle and reproduce t
 - Attempt to access hidden tests, network, host filesystem, credentials, and Docker socket from the worker.
 - Attempt to recover a planted future solution from `.git` refs, packed refs, tags, reflogs, and unreachable objects; the worker bundle must contain none of them.
 - Preserve and rerun the exact OCI image digest to confirm evaluator consistency; separately rebuild from pinned definitions to detect supply-chain drift without calling the rebuild identical.
+- Before the full reliability denominator, accept the campaign harness with one frozen
+  repository-owned fixture. Reject unknown/duplicate fields, content drift, incomplete
+  schedules, hidden retries, missing/nonterminal/undeclared/corrupt attempt evidence,
+  derived-claim tampering, and existing report paths. Treat this smoke only as harness
+  evidence.
+- Freeze the real normal-fixture campaign separately after all 20 distinct fixtures are
+  accepted. Use five explicit round-major attempts per fixture, fixed attempt IDs and
+  seeds, no hidden retry, and one report whose infrastructure-error numerator and
+  100-attempt denominator are derived from complete reconciled evidence.
 
 #### Exit gate
 
