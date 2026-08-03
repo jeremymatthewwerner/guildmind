@@ -1,0 +1,21 @@
+diff --git a/dedupe.py b/dedupe.py
+--- a/dedupe.py
++++ b/dedupe.py
+@@ -3 +3,2 @@
++import json
+ from typing import Any
+@@ -9 +10,13 @@ def dedupe_by(records: list[dict[str, Any]], key: str) -> list[dict[str, Any]]:
+-    return list({record[key]: record for record in records}.values())
++    seen: set[str] = set()
++    result: list[dict[str, Any]] = []
++    for record in records:
++        identity = json.dumps(
++            record[key],
++            ensure_ascii=False,
++            separators=(",", ":"),
++            sort_keys=True,
++        )
++        if identity not in seen:
++            seen.add(identity)
++            result.append(record)
++    return result

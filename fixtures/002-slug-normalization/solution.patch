@@ -1,0 +1,16 @@
+diff --git a/slug.py b/slug.py
+--- a/slug.py
++++ b/slug.py
+@@ -7 +7,11 @@ def slugify(text: str) -> str:
+-    return text.lower().replace(" ", "-")
++    output: list[str] = []
++    separator_pending = False
++    for character in text.casefold():
++        if character.isalnum():
++            if separator_pending and output:
++                output.append("-")
++            output.append(character)
++            separator_pending = False
++        else:
++            separator_pending = True
++    return "".join(output)

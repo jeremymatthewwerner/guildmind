@@ -1,0 +1,19 @@
+diff --git a/pointer.py b/pointer.py
+--- a/pointer.py
++++ b/pointer.py
+@@ -9,3 +9,12 @@ def resolve_pointer(document: Any, pointer: str) -> Any:
+-    if isinstance(document, dict):
+-        return document.get(pointer)
+-    return None
++    if pointer == "":
++        return document
++    if not pointer.startswith("/"):
++        raise ValueError("a nonempty JSON Pointer must start with a slash")
++    current = document
++    for raw_token in pointer[1:].split("/"):
++        token = raw_token.replace("~1", "/").replace("~0", "~")
++        if isinstance(current, list):
++            current = current[int(token)]
++        else:
++            current = current[token]
++    return current

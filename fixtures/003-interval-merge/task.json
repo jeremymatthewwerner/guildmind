@@ -1,0 +1,27 @@
+{
+  "schema_version": "guildmind.fixture/v1",
+  "task_id": "fixture-003-interval-merge",
+  "problem_statement": "Fix merge_intervals() so it returns closed integer intervals sorted by start, merging every overlap or adjacency. Each input interval has start <= end.",
+  "workspace_dir": "workspace",
+  "visible_test_files": [
+    "workspace/test_visible.py"
+  ],
+  "hidden_test_files": [
+    "grader/test_hidden.py"
+  ],
+  "evaluation_protocol": {
+    "kind": "python-call-v1",
+    "module": "intervals",
+    "callable": "merge_intervals",
+    "cases_file": "grader/cases.json"
+  },
+  "network_required": false,
+  "expected_test_count": 6,
+  "allowed_patch_paths": [
+    "intervals.py"
+  ],
+  "timeout_seconds": 5,
+  "max_output_bytes": 8192,
+  "max_patch_bytes": 4096,
+  "max_patch_files": 1
+}

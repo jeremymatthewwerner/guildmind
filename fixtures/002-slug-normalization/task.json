@@ -1,0 +1,27 @@
+{
+  "schema_version": "guildmind.fixture/v1",
+  "task_id": "fixture-002-slug-normalization",
+  "problem_statement": "Fix slugify() so it case-folds Unicode text, retains alphanumeric characters, replaces each run of other characters with one hyphen, and emits no leading or trailing hyphen.",
+  "workspace_dir": "workspace",
+  "visible_test_files": [
+    "workspace/test_visible.py"
+  ],
+  "hidden_test_files": [
+    "grader/test_hidden.py"
+  ],
+  "evaluation_protocol": {
+    "kind": "python-call-v1",
+    "module": "slug",
+    "callable": "slugify",
+    "cases_file": "grader/cases.json"
+  },
+  "network_required": false,
+  "expected_test_count": 6,
+  "allowed_patch_paths": [
+    "slug.py"
+  ],
+  "timeout_seconds": 5,
+  "max_output_bytes": 8192,
+  "max_patch_bytes": 4096,
+  "max_patch_files": 1
+}

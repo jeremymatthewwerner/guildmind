@@ -1,0 +1,16 @@
+diff --git a/intervals.py b/intervals.py
+--- a/intervals.py
++++ b/intervals.py
+@@ -7 +7,11 @@ def merge_intervals(intervals: list[list[int]]) -> list[list[int]]:
+-    return sorted(intervals)
++    if not intervals:
++        return []
++    ordered = sorted([start, end] for start, end in intervals)
++    merged = [ordered[0]]
++    for start, end in ordered[1:]:
++        previous = merged[-1]
++        if start <= previous[1] + 1:
++            previous[1] = max(previous[1], end)
++        else:
++            merged.append([start, end])
++    return merged

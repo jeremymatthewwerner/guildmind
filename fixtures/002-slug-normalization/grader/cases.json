@@ -1,0 +1,41 @@
+{
+  "schema_version": "guildmind.python-call-oracle/v1",
+  "cases": [
+    {
+      "case_id": "case-0001",
+      "args": [" Hello   World! "],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": "hello-world"}
+    },
+    {
+      "case_id": "case-0002",
+      "args": ["Multiple\tSpaces\nHere"],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": "multiple-spaces-here"}
+    },
+    {
+      "case_id": "case-0003",
+      "args": ["API_v2--Ready!"],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": "api-v2-ready"}
+    },
+    {
+      "case_id": "case-0004",
+      "args": ["Crème brûlée"],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": "crème-brûlée"}
+    },
+    {
+      "case_id": "case-0005",
+      "args": ["---"],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": ""}
+    },
+    {
+      "case_id": "case-0006",
+      "args": ["Straße & CAFÉ"],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": "strasse-café"}
+    }
+  ]
+}

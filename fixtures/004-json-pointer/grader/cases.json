@@ -1,0 +1,41 @@
+{
+  "schema_version": "guildmind.python-call-oracle/v1",
+  "cases": [
+    {
+      "case_id": "case-0001",
+      "args": [{"name": "guildmind"}, "/name"],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": "guildmind"}
+    },
+    {
+      "case_id": "case-0002",
+      "args": [{"a/b": {"~key": [10, 20]}}, "/a~1b/~0key/1"],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": 20}
+    },
+    {
+      "case_id": "case-0003",
+      "args": [[{"x": 1}, {"x": 2}], "/1/x"],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": 2}
+    },
+    {
+      "case_id": "case-0004",
+      "args": [{"nested": [1]}, ""],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": {"nested": [1]}}
+    },
+    {
+      "case_id": "case-0005",
+      "args": [{"": "empty-key"}, "/"],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": "empty-key"}
+    },
+    {
+      "case_id": "case-0006",
+      "args": [{"a": [{"b": false}]}, "/a/0/b"],
+      "kwargs": {},
+      "expected": {"kind": "returned", "value": false}
+    }
+  ]
+}
