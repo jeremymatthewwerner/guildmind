@@ -292,14 +292,28 @@ def test_loader_rejects_fixture_changed_after_manifest_was_frozen(tmp_path: Path
         load_reliability_campaign(path, repository_root=repository)
 
 
-def test_checked_in_smoke_manifest_matches_current_source_and_fixture() -> None:
+@pytest.mark.parametrize(
+    ("manifest_name", "campaign_id", "fixture_count"),
+    [
+        ("stage1-local-smoke-v1.json", "stage1-local-smoke-v1", 1),
+        ("stage1-local-batch-001-v1.json", "stage1-local-batch-001-v1", 5),
+    ],
+)
+def test_checked_in_campaign_manifest_matches_current_source_and_fixtures(
+    manifest_name: str,
+    campaign_id: str,
+    fixture_count: int,
+) -> None:
     campaign = load_reliability_campaign(
-        _REPOSITORY_ROOT / "campaigns" / "stage1-local-smoke-v1.json",
+        _REPOSITORY_ROOT / "campaigns" / manifest_name,
         repository_root=_REPOSITORY_ROOT,
     )
 
-    assert campaign.manifest.campaign_id == "stage1-local-smoke-v1"
+    assert campaign.manifest.campaign_id == campaign_id
+    assert len(campaign.manifest.fixtures) == fixture_count
+    assert len(campaign.manifest.attempts) == fixture_count * campaign.manifest.rounds
     assert campaign.manifest.code_source_sha256 == campaign_code_source_sha256(_REPOSITORY_ROOT)
-    assert campaign.manifest.fixtures[0].fixture_tree_sha256 == campaign_fixture_tree_sha256(
-        _REPOSITORY_ROOT / "fixtures" / "001-python-addition"
-    )
+    for fixture in campaign.manifest.fixtures:
+        assert fixture.fixture_tree_sha256 == campaign_fixture_tree_sha256(
+            _REPOSITORY_ROOT / fixture.fixture_path
+        )
