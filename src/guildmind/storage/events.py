@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
+import stat
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Self
 
 from pydantic import JsonValue
 
@@ -55,12 +58,149 @@ _MANIFEST_MUTABLE_FIELDS = {
 }
 _CONNECTION_TIMEOUT_SECONDS = 5.0
 _BUSY_TIMEOUT_MILLISECONDS = 5_000
+_VERIFIED_RUN_ROOT_SNAPSHOT_SCHEMA_VERSION = "guildmind.verified-run-root-snapshot/v1"
 _EXPECTED_CONNECTION_SETTINGS: tuple[tuple[str, str | int], ...] = (
     ("foreign_keys", 1),
     ("journal_mode", "wal"),
     ("synchronous", 2),
     ("busy_timeout", _BUSY_TIMEOUT_MILLISECONDS),
 )
+_EXPECTED_READ_ONLY_CONNECTION_SETTINGS: tuple[tuple[str, str | int], ...] = (
+    ("foreign_keys", 1),
+    ("synchronous", 2),
+    ("busy_timeout", _BUSY_TIMEOUT_MILLISECONDS),
+    ("query_only", 1),
+)
+_EXPECTED_TABLE_SQL: tuple[tuple[str, str], ...] = (
+    (
+        "runs",
+        """CREATE TABLE runs (
+                run_id TEXT PRIMARY KEY,
+                status TEXT NOT NULL,
+                manifest_revision INTEGER NOT NULL,
+                manifest_json TEXT NOT NULL,
+                manifest_sha256 TEXT NOT NULL
+            )""",
+    ),
+    (
+        "run_manifests",
+        """CREATE TABLE run_manifests (
+                run_id TEXT NOT NULL REFERENCES runs(run_id),
+                revision INTEGER NOT NULL,
+                manifest_json TEXT NOT NULL,
+                manifest_sha256 TEXT NOT NULL,
+                PRIMARY KEY(run_id, revision)
+            )""",
+    ),
+    (
+        "events",
+        """CREATE TABLE events (
+                run_id TEXT NOT NULL REFERENCES runs(run_id),
+                sequence INTEGER NOT NULL,
+                event_id TEXT NOT NULL UNIQUE,
+                event_type TEXT NOT NULL,
+                record_json TEXT NOT NULL,
+                event_hash TEXT NOT NULL,
+                PRIMARY KEY(run_id, sequence)
+            )""",
+    ),
+    (
+        "budget_state",
+        """CREATE TABLE budget_state (
+                run_id TEXT PRIMARY KEY REFERENCES runs(run_id),
+                limits_json TEXT NOT NULL,
+                used_json TEXT NOT NULL,
+                reserved_json TEXT NOT NULL
+            )""",
+    ),
+)
+_SCHEMA_INITIALIZATION_SQL = (
+    ";\n\n".join(
+        sql.replace("CREATE TABLE ", "CREATE TABLE IF NOT EXISTS ", 1)
+        for _, sql in _EXPECTED_TABLE_SQL
+    )
+    + ";"
+)
+_EXPECTED_TABLE_COLUMNS: Mapping[
+    str,
+    tuple[tuple[int, str, str, int, str | None, int, int], ...],
+] = {
+    "runs": (
+        (0, "run_id", "TEXT", 0, None, 1, 0),
+        (1, "status", "TEXT", 1, None, 0, 0),
+        (2, "manifest_revision", "INTEGER", 1, None, 0, 0),
+        (3, "manifest_json", "TEXT", 1, None, 0, 0),
+        (4, "manifest_sha256", "TEXT", 1, None, 0, 0),
+    ),
+    "run_manifests": (
+        (0, "run_id", "TEXT", 1, None, 1, 0),
+        (1, "revision", "INTEGER", 1, None, 2, 0),
+        (2, "manifest_json", "TEXT", 1, None, 0, 0),
+        (3, "manifest_sha256", "TEXT", 1, None, 0, 0),
+    ),
+    "events": (
+        (0, "run_id", "TEXT", 1, None, 1, 0),
+        (1, "sequence", "INTEGER", 1, None, 2, 0),
+        (2, "event_id", "TEXT", 1, None, 0, 0),
+        (3, "event_type", "TEXT", 1, None, 0, 0),
+        (4, "record_json", "TEXT", 1, None, 0, 0),
+        (5, "event_hash", "TEXT", 1, None, 0, 0),
+    ),
+    "budget_state": (
+        (0, "run_id", "TEXT", 0, None, 1, 0),
+        (1, "limits_json", "TEXT", 1, None, 0, 0),
+        (2, "used_json", "TEXT", 1, None, 0, 0),
+        (3, "reserved_json", "TEXT", 1, None, 0, 0),
+    ),
+}
+_EXPECTED_FOREIGN_KEYS: Mapping[
+    str,
+    tuple[tuple[int, int, str, str, str, str, str, str], ...],
+] = {
+    "runs": (),
+    "run_manifests": ((0, 0, "runs", "run_id", "run_id", "NO ACTION", "NO ACTION", "NONE"),),
+    "events": ((0, 0, "runs", "run_id", "run_id", "NO ACTION", "NO ACTION", "NONE"),),
+    "budget_state": ((0, 0, "runs", "run_id", "run_id", "NO ACTION", "NO ACTION", "NONE"),),
+}
+_EXPECTED_TABLE_INDEXES: Mapping[
+    str,
+    tuple[tuple[str, int, str, int], ...],
+] = {
+    "runs": (("sqlite_autoindex_runs_1", 1, "pk", 0),),
+    "run_manifests": (("sqlite_autoindex_run_manifests_1", 1, "pk", 0),),
+    "events": (
+        ("sqlite_autoindex_events_1", 1, "u", 0),
+        ("sqlite_autoindex_events_2", 1, "pk", 0),
+    ),
+    "budget_state": (("sqlite_autoindex_budget_state_1", 1, "pk", 0),),
+}
+_EXPECTED_INDEX_COLUMNS: Mapping[
+    str,
+    tuple[tuple[int, int, str | None, int, str, int], ...],
+] = {
+    "sqlite_autoindex_runs_1": (
+        (0, 0, "run_id", 0, "BINARY", 1),
+        (1, -1, None, 0, "BINARY", 0),
+    ),
+    "sqlite_autoindex_run_manifests_1": (
+        (0, 0, "run_id", 0, "BINARY", 1),
+        (1, 1, "revision", 0, "BINARY", 1),
+        (2, -1, None, 0, "BINARY", 0),
+    ),
+    "sqlite_autoindex_events_1": (
+        (0, 2, "event_id", 0, "BINARY", 1),
+        (1, -1, None, 0, "BINARY", 0),
+    ),
+    "sqlite_autoindex_events_2": (
+        (0, 0, "run_id", 0, "BINARY", 1),
+        (1, 1, "sequence", 0, "BINARY", 1),
+        (2, -1, None, 0, "BINARY", 0),
+    ),
+    "sqlite_autoindex_budget_state_1": (
+        (0, 0, "run_id", 0, "BINARY", 1),
+        (1, -1, None, 0, "BINARY", 0),
+    ),
+}
 
 
 class StoreIntegrityError(RuntimeError):
@@ -78,22 +218,247 @@ class VerifiedRunRoot:
     head_event_sha256: str
 
 
+def verified_run_roots_sha256(roots: Sequence[VerifiedRunRoot]) -> str:
+    """Commit deterministically to an ordered set of verified ledger roots."""
+
+    ordered = tuple(sorted(roots, key=lambda root: root.manifest.run_id))
+    identities: list[dict[str, str | int]] = []
+    previous_run_id: str | None = None
+    for root in ordered:
+        run_id = root.manifest.run_id
+        if run_id == previous_run_id:
+            raise ValueError(f"duplicate verified run root: {run_id}")
+        previous_run_id = run_id
+        identities.append(
+            {
+                "event_count": root.event_count,
+                "head_event_sha256": root.head_event_sha256,
+                "manifest_revision": root.manifest_revision,
+                "manifest_sha256": root.manifest_sha256,
+                "run_id": run_id,
+            }
+        )
+    return canonical_sha256(
+        {
+            "roots": identities,
+            "schema_version": _VERIFIED_RUN_ROOT_SNAPSHOT_SCHEMA_VERSION,
+        }
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class _DatabaseFileIdentity:
+    device: int
+    inode: int
+
+
+@dataclass(frozen=True, slots=True)
+class _DatabasePathIdentity:
+    directory_identities: tuple[_DatabaseFileIdentity, ...]
+    leaf_identity: _DatabaseFileIdentity
+
+
+@dataclass(frozen=True, slots=True)
+class _SidecarState:
+    wal_identity: _DatabaseFileIdentity | None
+    wal_size: int | None
+    shm_identity: _DatabaseFileIdentity | None
+    shm_size: int | None
+
+
 class EventStore:
     """Own all local control-plane writes through one SQLite connection."""
 
     def __init__(self, path: Path, *, clock: Clock | None = None) -> None:
-        self.path = path.resolve()
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._clock = clock or SystemClock()
-        self._connection = sqlite3.connect(
-            self.path,
-            timeout=_CONNECTION_TIMEOUT_SECONDS,
-            isolation_level=None,
+        configured_path = Path(os.path.abspath(path))
+        configured_path.parent.mkdir(parents=True, exist_ok=True)
+        absolute_path, resolved_base = _canonicalize_existing_database_path(
+            configured_path,
+            trusted_base=configured_path.parent,
         )
+        _preflight_missing_database_sidecars(absolute_path)
+        created_identity = _create_database_exclusively(absolute_path)
+        if created_identity is None:
+            self._open_existing_writable_in_place(
+                absolute_path,
+                clock=clock,
+                trusted_base=resolved_base,
+            )
+            return
+
+        expected_path_identity = _validate_existing_database_path(
+            absolute_path,
+            trusted_base=resolved_base,
+            allow_empty=True,
+        )
+        if expected_path_identity.leaf_identity != created_identity:
+            raise StoreIntegrityError("new event store changed before it could be opened")
+        sidecars = _inspect_existing_sidecars(absolute_path)
+        if sidecars.wal_identity is not None or sidecars.shm_identity is not None:
+            raise StoreIntegrityError("new event store path has pre-existing SQLite sidecars")
+
+        self.path = absolute_path
+        self._clock = clock or SystemClock()
+        self._read_only = False
+        self._read_only_journal_mode = "wal"
+        self._trusted_base = resolved_base
+        self._existing_path_identity = expected_path_identity
+        uri = f"{absolute_path.as_uri()}?mode=rw&cache=private"
+        try:
+            self._connection = sqlite3.connect(
+                uri,
+                uri=True,
+                timeout=_CONNECTION_TIMEOUT_SECONDS,
+                isolation_level=None,
+            )
+        except sqlite3.DatabaseError as error:
+            raise StoreIntegrityError("new event store could not be opened writable") from error
         self._connection.row_factory = sqlite3.Row
         try:
             self._configure_connection()
             self._initialize_schema()
+            self._validate_existing_database()
+            _validate_existing_database_path(
+                absolute_path,
+                trusted_base=resolved_base,
+                expected_identity=expected_path_identity,
+            )
+            _validate_persisted_wal_header(absolute_path, expected_path_identity)
+            _inspect_existing_sidecars(absolute_path)
+        except BaseException:
+            self._connection.close()
+            raise
+
+    @classmethod
+    def open_existing_read_only(
+        cls,
+        path: Path,
+        *,
+        clock: Clock | None = None,
+        trusted_base: Path | None = None,
+    ) -> Self:
+        """Open an existing database without creating its main DB or schema.
+
+        ``trusted_base`` is resolved once so trusted operating-system path aliases are
+        accepted; descendants through the database leaf may not be links. The database
+        must remain quiescent for this handle. A present WAL requires its existing SHM;
+        committed WAL state is included, and SQLite may update coordination metadata in
+        that existing SHM. When both sidecars are absent, immutable mode prevents their
+        creation and their absence is checked again after database validation.
+        """
+
+        absolute_path, resolved_base = _canonicalize_existing_database_path(
+            path,
+            trusted_base=trusted_base,
+        )
+        expected_path_identity = _validate_existing_database_path(
+            absolute_path,
+            trusted_base=resolved_base,
+        )
+        _validate_persisted_wal_header(absolute_path, expected_path_identity)
+        expected_sidecars = _inspect_existing_sidecars(absolute_path)
+        immutable = expected_sidecars.wal_identity is None
+        instance = cls.__new__(cls)
+        instance.path = absolute_path
+        instance._clock = clock or SystemClock()
+        instance._read_only = True
+        instance._read_only_journal_mode = "delete" if immutable else "wal"
+        instance._trusted_base = resolved_base
+        instance._existing_path_identity = expected_path_identity
+        immutable_parameter = "&immutable=1" if immutable else ""
+        uri = f"{absolute_path.as_uri()}?mode=ro{immutable_parameter}&cache=private"
+        try:
+            instance._connection = sqlite3.connect(
+                uri,
+                uri=True,
+                timeout=_CONNECTION_TIMEOUT_SECONDS,
+                isolation_level=None,
+            )
+        except sqlite3.DatabaseError as error:
+            raise StoreIntegrityError(
+                "existing event store could not be opened read-only"
+            ) from error
+        instance._connection.row_factory = sqlite3.Row
+        try:
+            instance._configure_read_only_connection()
+            instance._validate_existing_database()
+            _validate_existing_database_path(
+                absolute_path,
+                trusted_base=resolved_base,
+                expected_identity=expected_path_identity,
+            )
+            _validate_persisted_wal_header(absolute_path, expected_path_identity)
+            if _inspect_existing_sidecars(absolute_path) != expected_sidecars:
+                raise StoreIntegrityError("event store sidecars changed while opening")
+        except BaseException:
+            instance._connection.close()
+            raise
+        return instance
+
+    @classmethod
+    def open_existing_writable(
+        cls,
+        path: Path,
+        *,
+        clock: Clock | None = None,
+        trusted_base: Path | None = None,
+    ) -> Self:
+        """Open an existing WAL database for writes without creating or migrating it."""
+
+        instance = cls.__new__(cls)
+        instance._open_existing_writable_in_place(
+            path,
+            clock=clock,
+            trusted_base=trusted_base,
+        )
+        return instance
+
+    def _open_existing_writable_in_place(
+        self,
+        path: Path,
+        *,
+        clock: Clock | None,
+        trusted_base: Path | None,
+    ) -> None:
+        absolute_path, resolved_base = _canonicalize_existing_database_path(
+            path,
+            trusted_base=trusted_base,
+        )
+        expected_path_identity = _validate_existing_database_path(
+            absolute_path,
+            trusted_base=resolved_base,
+        )
+        _validate_persisted_wal_header(absolute_path, expected_path_identity)
+        _inspect_existing_sidecars(absolute_path)
+        self.path = absolute_path
+        self._clock = clock or SystemClock()
+        self._read_only = False
+        self._read_only_journal_mode = "wal"
+        self._trusted_base = resolved_base
+        self._existing_path_identity = expected_path_identity
+        uri = f"{absolute_path.as_uri()}?mode=rw&cache=private"
+        try:
+            self._connection = sqlite3.connect(
+                uri,
+                uri=True,
+                timeout=_CONNECTION_TIMEOUT_SECONDS,
+                isolation_level=None,
+            )
+        except sqlite3.DatabaseError as error:
+            raise StoreIntegrityError(
+                "existing event store could not be opened writable"
+            ) from error
+        self._connection.row_factory = sqlite3.Row
+        try:
+            self._configure_existing_writable_connection()
+            self._validate_existing_database()
+            _validate_existing_database_path(
+                absolute_path,
+                trusted_base=resolved_base,
+                expected_identity=expected_path_identity,
+            )
+            _validate_persisted_wal_header(absolute_path, expected_path_identity)
+            _inspect_existing_sidecars(absolute_path)
         except BaseException:
             self._connection.close()
             raise
@@ -417,17 +782,27 @@ class EventStore:
         *,
         finished_at: datetime,
         terminal_reason: str = "interrupted_run_recovered",
+        expected_snapshot_sha256: str | None = None,
     ) -> RunManifest:
         """Terminalize an interrupted run without redispatching external work.
 
         A started request with no recorded response is classified as ambiguous and its
         full outstanding reservation is charged. Calling this method again on the
-        resulting terminal run is a read-only no-op.
+        resulting terminal run is a read-only no-op. When an expected snapshot is
+        supplied, the complete ledger commitment must still match under the recovery
+        write transaction before any lifecycle state is changed.
         """
 
         if not terminal_reason.strip():
             raise ValueError("terminal_reason cannot be empty")
+        if expected_snapshot_sha256 is not None and not _is_lower_sha256(expected_snapshot_sha256):
+            raise ValueError("expected_snapshot_sha256 must be a lowercase SHA-256")
         with self._transaction():
+            self._validate_schema_locked()
+            if expected_snapshot_sha256 is not None:
+                observed_snapshot_sha256 = verified_run_roots_sha256(self._verified_roots_locked())
+                if observed_snapshot_sha256 != expected_snapshot_sha256:
+                    raise StoreIntegrityError("verified run root snapshot changed before recovery")
             current = self._load_manifest_locked(run_id)
             state = self._validated_state_locked(run_id, current)
             if current.status.is_terminal:
@@ -483,6 +858,14 @@ class EventStore:
             self._save_manifest_locked(run_id, final_manifest)
             self._update_budget_locked(run_id, used, reserved)
             self._validate_terminal_state_locked(run_id, final_manifest)
+            try:
+                self._verified_roots_locked()
+            except StoreIntegrityError:
+                raise
+            except (IndexError, KeyError, ValueError, sqlite3.DatabaseError) as error:
+                raise StoreIntegrityError(
+                    "database integrity validation failed after recovery"
+                ) from error
             return final_manifest
 
     def complete_budget_exhaustion(
@@ -578,56 +961,81 @@ class EventStore:
         manifest revision and hash-chained event head observed in this snapshot.
         """
 
+        with self.verified_snapshot() as roots:
+            return roots
+
+    @contextmanager
+    def verified_snapshot(self) -> Iterator[tuple[VerifiedRunRoot, ...]]:
+        """Yield validated roots while retaining their consistent read transaction."""
+
         self._verify_connection_settings()
         if self._connection.in_transaction:
             raise StoreIntegrityError("integrity verification requires an idle connection")
-
+        self._validate_tracked_path()
         try:
             self._connection.execute("BEGIN")
-            self._verify_sqlite_integrity_locked()
-            rows = self._connection.execute(
-                "SELECT run_id, manifest_revision FROM runs ORDER BY run_id ASC"
-            ).fetchall()
-            roots: list[VerifiedRunRoot] = []
-            for row in rows:
-                run_id = str(row["run_id"])
-                manifest_revision = int(row["manifest_revision"])
-                manifest = self._load_manifest_locked(run_id)
-                self._validate_manifest_history_locked(
-                    run_id,
-                    current=manifest,
-                    current_revision=manifest_revision,
-                )
-                state = self._validated_state_locked(run_id, manifest)
-                events = self._list_events_locked(run_id)
-                if manifest.status.is_terminal:
-                    try:
-                        replay_events(events, require_terminal=True)
-                    except ReplayIntegrityError as error:
-                        raise StoreIntegrityError(
-                            f"incomplete terminal run {run_id}: {error}"
-                        ) from error
-                    if state.terminal_reason != manifest.terminal_reason:
-                        raise StoreIntegrityError(
-                            f"manifest terminal reason disagrees with replay for run {run_id}"
-                        )
-                roots.append(
-                    VerifiedRunRoot(
-                        manifest=manifest,
-                        manifest_revision=manifest_revision,
-                        manifest_sha256=canonical_sha256(manifest),
-                        event_count=len(events),
-                        head_event_sha256=events[-1].content_hash(),
-                    )
-                )
-            return tuple(roots)
-        except StoreIntegrityError:
-            raise
-        except (KeyError, ValueError, sqlite3.DatabaseError) as error:
-            raise StoreIntegrityError("database integrity validation failed") from error
+        except sqlite3.DatabaseError as error:
+            raise StoreIntegrityError(
+                "integrity verification could not begin a snapshot"
+            ) from error
+        try:
+            try:
+                self._validate_tracked_path()
+                if self._existing_path_identity is not None:
+                    self._validate_schema_locked()
+                roots = self._verified_roots_locked()
+            except StoreIntegrityError:
+                raise
+            except (IndexError, KeyError, ValueError, sqlite3.DatabaseError) as error:
+                raise StoreIntegrityError("database integrity validation failed") from error
+            yield roots
+            self._validate_tracked_path()
         finally:
             if self._connection.in_transaction:
                 self._connection.rollback()
+
+    def _verified_roots_locked(self) -> tuple[VerifiedRunRoot, ...]:
+        """Validate roots inside the caller's already-active consistent transaction."""
+
+        if not self._connection.in_transaction:
+            raise StoreIntegrityError("verified roots require an active transaction")
+        self._verify_sqlite_integrity_locked()
+        rows = self._connection.execute(
+            "SELECT run_id, manifest_revision FROM runs ORDER BY run_id ASC"
+        ).fetchall()
+        roots: list[VerifiedRunRoot] = []
+        for row in rows:
+            run_id = str(row["run_id"])
+            manifest_revision = int(row["manifest_revision"])
+            manifest = self._load_manifest_locked(run_id)
+            self._validate_manifest_history_locked(
+                run_id,
+                current=manifest,
+                current_revision=manifest_revision,
+            )
+            state = self._validated_state_locked(run_id, manifest)
+            events = self._list_events_locked(run_id)
+            if manifest.status.is_terminal:
+                try:
+                    replay_events(events, require_terminal=True)
+                except ReplayIntegrityError as error:
+                    raise StoreIntegrityError(
+                        f"incomplete terminal run {run_id}: {error}"
+                    ) from error
+                if state.terminal_reason != manifest.terminal_reason:
+                    raise StoreIntegrityError(
+                        f"manifest terminal reason disagrees with replay for run {run_id}"
+                    )
+            roots.append(
+                VerifiedRunRoot(
+                    manifest=manifest,
+                    manifest_revision=manifest_revision,
+                    manifest_sha256=canonical_sha256(manifest),
+                    event_count=len(events),
+                    head_event_sha256=events[-1].content_hash(),
+                )
+            )
+        return tuple(roots)
 
     def _append_locked(
         self,
@@ -826,18 +1234,32 @@ class EventStore:
         ).fetchone()
         if row is None:
             raise KeyError(f"unknown run: {run_id}")
-        limits = BudgetLimits.model_validate(json.loads(row["limits_json"]))
+        raw_limits = row["limits_json"]
+        raw_used = row["used_json"]
+        raw_reserved = row["reserved_json"]
+        limits = BudgetLimits.model_validate(json.loads(raw_limits))
+        used = BudgetUsage.model_validate(json.loads(raw_used))
+        reserved = BudgetUsage.model_validate(json.loads(raw_reserved))
         if limits != self._load_manifest_locked(run_id).budget_limits:
             raise StoreIntegrityError(f"budget limits index mismatch for run {run_id}")
-        return (
-            BudgetUsage.model_validate(json.loads(row["used_json"])),
-            BudgetUsage.model_validate(json.loads(row["reserved_json"])),
-        )
+        if raw_limits != canonical_json(limits):
+            raise StoreIntegrityError(
+                f"budget limits index mismatch: non-canonical encoding for run {run_id}"
+            )
+        if raw_used != canonical_json(used):
+            raise StoreIntegrityError(
+                f"budget index disagrees: non-canonical usage for run {run_id}"
+            )
+        if raw_reserved != canonical_json(reserved):
+            raise StoreIntegrityError(
+                f"budget index disagrees: non-canonical reservation for run {run_id}"
+            )
+        return used, reserved
 
     def _list_events_locked(self, run_id: str) -> list[EventRecord]:
         rows = self._connection.execute(
             """
-            SELECT sequence, record_json, event_hash
+            SELECT run_id, sequence, event_id, event_type, record_json, event_hash
             FROM events WHERE run_id = ? ORDER BY sequence ASC
             """,
             (run_id,),
@@ -848,10 +1270,25 @@ class EventStore:
         events: list[EventRecord] = []
         previous_hash: str | None = None
         for expected_sequence, row in enumerate(rows):
-            event = EventRecord.model_validate(json.loads(row["record_json"]))
+            raw_record = row["record_json"]
+            event = EventRecord.model_validate(json.loads(raw_record))
             event_hash = event.content_hash()
+            if row["run_id"] != run_id or event.run_id != run_id:
+                raise StoreIntegrityError(f"event run ownership mismatch for run {run_id}")
             if row["sequence"] != expected_sequence or event.sequence != expected_sequence:
                 raise StoreIntegrityError(f"non-contiguous event sequence for run {run_id}")
+            if row["event_id"] != event.event_id:
+                raise StoreIntegrityError(
+                    f"event ID index mismatch at sequence {expected_sequence}"
+                )
+            if row["event_type"] != event.event_type:
+                raise StoreIntegrityError(
+                    f"event type index mismatch at sequence {expected_sequence}"
+                )
+            if raw_record != canonical_json(event):
+                raise StoreIntegrityError(
+                    f"non-canonical event record at sequence {expected_sequence}"
+                )
             if event.previous_event_hash != previous_hash:
                 raise StoreIntegrityError(f"broken event predecessor for run {run_id}")
             if event_hash != row["event_hash"]:
@@ -932,8 +1369,43 @@ class EventStore:
         self._connection.execute(f"PRAGMA busy_timeout = {_BUSY_TIMEOUT_MILLISECONDS}")
         self._verify_connection_settings()
 
+    def _configure_read_only_connection(self) -> None:
+        try:
+            # These are connection-local safeguards; journal mode is intentionally
+            # never assigned on the read-only reader.
+            self._connection.execute("PRAGMA foreign_keys = ON")
+            self._connection.execute("PRAGMA synchronous = FULL")
+            self._connection.execute("PRAGMA query_only = ON")
+            self._connection.execute(f"PRAGMA busy_timeout = {_BUSY_TIMEOUT_MILLISECONDS}")
+        except sqlite3.DatabaseError as error:
+            raise StoreIntegrityError("could not configure read-only SQLite connection") from error
+        self._verify_connection_settings()
+
+    def _configure_existing_writable_connection(self) -> None:
+        try:
+            # Preserve the persisted journal mode: recovery may only proceed if the
+            # existing database already satisfies the WAL contract.
+            self._connection.execute("PRAGMA foreign_keys = ON")
+            self._connection.execute("PRAGMA synchronous = FULL")
+            self._connection.execute(f"PRAGMA busy_timeout = {_BUSY_TIMEOUT_MILLISECONDS}")
+        except sqlite3.DatabaseError as error:
+            raise StoreIntegrityError(
+                "could not configure existing writable SQLite connection"
+            ) from error
+        self._verify_connection_settings()
+
     def _verify_connection_settings(self) -> None:
-        for pragma, expected in _EXPECTED_CONNECTION_SETTINGS:
+        expected_settings = (
+            _EXPECTED_READ_ONLY_CONNECTION_SETTINGS
+            if self._read_only
+            else _EXPECTED_CONNECTION_SETTINGS
+        )
+        if self._read_only:
+            expected_settings = (
+                *expected_settings,
+                ("journal_mode", self._read_only_journal_mode),
+            )
+        for pragma, expected in expected_settings:
             try:
                 row = self._connection.execute(f"PRAGMA {pragma}").fetchone()
             except sqlite3.DatabaseError as error:
@@ -966,55 +1438,370 @@ class EventStore:
                 f"SQLite foreign_key_check failed with {len(foreign_key_violations)} violation(s)"
             )
 
+    def _validate_existing_database(self) -> None:
+        try:
+            self._connection.execute("BEGIN")
+        except sqlite3.DatabaseError as error:
+            raise StoreIntegrityError(
+                "existing event store could not begin a read snapshot"
+            ) from error
+        try:
+            self._validate_schema_locked()
+            self._verify_sqlite_integrity_locked()
+        except StoreIntegrityError:
+            raise
+        except sqlite3.DatabaseError as error:
+            raise StoreIntegrityError("existing event store schema is invalid") from error
+        finally:
+            self._connection.rollback()
+
+    def _validate_schema_locked(self) -> None:
+        """Require the exact schema emitted by the current GuildMind constructor."""
+
+        if not self._connection.in_transaction:
+            raise StoreIntegrityError("schema validation requires an active transaction")
+        expected_schema_objects: set[tuple[str, str, str, str | None]] = {
+            ("table", name, name, sql) for name, sql in _EXPECTED_TABLE_SQL
+        }
+        for table, indexes in _EXPECTED_TABLE_INDEXES.items():
+            expected_schema_objects.update(
+                ("index", name, table, None) for name, _, _, _ in indexes
+            )
+        try:
+            observed_schema_objects = {
+                tuple(row)
+                for row in self._connection.execute(
+                    """
+                    SELECT type, name, tbl_name, sql
+                    FROM main.sqlite_schema
+                    """
+                ).fetchall()
+            }
+            if observed_schema_objects != expected_schema_objects:
+                raise StoreIntegrityError("existing event store schema is invalid")
+
+            for table, expected_columns in _EXPECTED_TABLE_COLUMNS.items():
+                observed_columns = tuple(
+                    sorted(
+                        (
+                            tuple(row)
+                            for row in self._connection.execute(
+                                f'PRAGMA main.table_xinfo("{table}")'
+                            ).fetchall()
+                        ),
+                        key=lambda row: int(row[0]),
+                    )
+                )
+                if observed_columns != expected_columns:
+                    raise StoreIntegrityError("existing event store schema is invalid")
+
+                observed_foreign_keys = tuple(
+                    sorted(
+                        (
+                            tuple(row)
+                            for row in self._connection.execute(
+                                f'PRAGMA main.foreign_key_list("{table}")'
+                            ).fetchall()
+                        ),
+                        key=lambda row: (int(row[0]), int(row[1])),
+                    )
+                )
+                if observed_foreign_keys != _EXPECTED_FOREIGN_KEYS[table]:
+                    raise StoreIntegrityError("existing event store schema is invalid")
+
+                observed_indexes = tuple(
+                    sorted(
+                        (
+                            (str(row[1]), int(row[2]), str(row[3]), int(row[4]))
+                            for row in self._connection.execute(
+                                f'PRAGMA main.index_list("{table}")'
+                            ).fetchall()
+                        ),
+                        key=lambda row: row[0],
+                    )
+                )
+                if observed_indexes != _EXPECTED_TABLE_INDEXES[table]:
+                    raise StoreIntegrityError("existing event store schema is invalid")
+
+            for index, expected_index_columns in _EXPECTED_INDEX_COLUMNS.items():
+                observed_index_columns = tuple(
+                    sorted(
+                        (
+                            tuple(row)
+                            for row in self._connection.execute(
+                                f'PRAGMA main.index_xinfo("{index}")'
+                            ).fetchall()
+                        ),
+                        key=lambda row: int(row[0]),
+                    )
+                )
+                if observed_index_columns != expected_index_columns:
+                    raise StoreIntegrityError("existing event store schema is invalid")
+        except StoreIntegrityError:
+            raise
+        except (IndexError, TypeError, ValueError, sqlite3.DatabaseError) as error:
+            raise StoreIntegrityError("existing event store schema is invalid") from error
+
     @contextmanager
     def _transaction(self) -> Iterator[None]:
+        if self._read_only:
+            raise StoreIntegrityError("event store is read-only")
+        self._validate_tracked_path()
         self._connection.execute("BEGIN IMMEDIATE")
         try:
+            self._validate_tracked_path()
+            if self._existing_path_identity is not None:
+                self._validate_schema_locked()
+                self._validate_full_ledger_locked()
+                self._validate_tracked_path()
             yield
+            self._validate_tracked_path()
+            if self._existing_path_identity is not None:
+                self._validate_schema_locked()
+                self._validate_full_ledger_locked()
+            self._validate_tracked_path()
         except BaseException:
             self._connection.rollback()
             raise
         else:
             self._connection.commit()
 
+    def _validate_full_ledger_locked(self) -> None:
+        try:
+            self._verified_roots_locked()
+        except StoreIntegrityError:
+            raise
+        except (IndexError, KeyError, TypeError, ValueError, sqlite3.DatabaseError) as error:
+            raise StoreIntegrityError("database integrity validation failed") from error
+
     def _initialize_schema(self) -> None:
-        self._connection.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS runs (
-                run_id TEXT PRIMARY KEY,
-                status TEXT NOT NULL,
-                manifest_revision INTEGER NOT NULL,
-                manifest_json TEXT NOT NULL,
-                manifest_sha256 TEXT NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS run_manifests (
-                run_id TEXT NOT NULL REFERENCES runs(run_id),
-                revision INTEGER NOT NULL,
-                manifest_json TEXT NOT NULL,
-                manifest_sha256 TEXT NOT NULL,
-                PRIMARY KEY(run_id, revision)
-            );
-
-            CREATE TABLE IF NOT EXISTS events (
-                run_id TEXT NOT NULL REFERENCES runs(run_id),
-                sequence INTEGER NOT NULL,
-                event_id TEXT NOT NULL UNIQUE,
-                event_type TEXT NOT NULL,
-                record_json TEXT NOT NULL,
-                event_hash TEXT NOT NULL,
-                PRIMARY KEY(run_id, sequence)
-            );
-
-            CREATE TABLE IF NOT EXISTS budget_state (
-                run_id TEXT PRIMARY KEY REFERENCES runs(run_id),
-                limits_json TEXT NOT NULL,
-                used_json TEXT NOT NULL,
-                reserved_json TEXT NOT NULL
-            );
-            """
-        )
+        self._connection.executescript(_SCHEMA_INITIALIZATION_SQL)
         self._connection.commit()
+
+    def _validate_tracked_path(self) -> None:
+        if self._trusted_base is None or self._existing_path_identity is None:
+            return
+        _validate_existing_database_path(
+            self.path,
+            trusted_base=self._trusted_base,
+            expected_identity=self._existing_path_identity,
+        )
+        _validate_persisted_wal_header(self.path, self._existing_path_identity)
+        _inspect_existing_sidecars(self.path)
+
+
+def _is_lower_sha256(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def _canonicalize_existing_database_path(
+    path: Path,
+    *,
+    trusted_base: Path | None,
+) -> tuple[Path, Path]:
+    configured_path = Path(os.path.abspath(path))
+    configured_base = Path(
+        os.path.abspath(trusted_base if trusted_base is not None else configured_path.parent)
+    )
+    try:
+        relative_path = configured_path.relative_to(configured_base)
+    except ValueError as error:
+        raise ValueError("event store path must be below its trusted base") from error
+    if not relative_path.parts:
+        raise ValueError("event store path must be below its trusted base")
+    try:
+        resolved_base = configured_base.resolve(strict=True)
+    except OSError as error:
+        raise StoreIntegrityError("existing event store trusted base is unavailable") from error
+    return resolved_base.joinpath(relative_path), resolved_base
+
+
+def _validate_existing_database_path(
+    path: Path,
+    *,
+    trusted_base: Path,
+    expected_identity: _DatabasePathIdentity | None = None,
+    allow_empty: bool = False,
+) -> _DatabasePathIdentity:
+    try:
+        relative_path = path.relative_to(trusted_base)
+    except ValueError as error:
+        raise StoreIntegrityError("existing event store escaped its trusted base") from error
+    current = trusted_base
+    directories = [current]
+    for component in relative_path.parts[:-1]:
+        current /= component
+        directories.append(current)
+    directory_identities: list[_DatabaseFileIdentity] = []
+    for directory in directories:
+        try:
+            metadata = directory.lstat()
+        except FileNotFoundError as error:
+            raise StoreIntegrityError("existing event store parent directory is missing") from error
+        except OSError as error:
+            raise StoreIntegrityError(
+                "existing event store parent directory could not be inspected"
+            ) from error
+        if not stat.S_ISDIR(metadata.st_mode):
+            raise StoreIntegrityError(
+                "existing event store parent path must contain only real directories"
+            )
+        directory_identities.append(
+            _DatabaseFileIdentity(device=metadata.st_dev, inode=metadata.st_ino)
+        )
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError as error:
+        raise StoreIntegrityError("existing event store does not exist") from error
+    except OSError as error:
+        raise StoreIntegrityError("existing event store could not be inspected") from error
+    if stat.S_ISLNK(metadata.st_mode):
+        raise StoreIntegrityError("existing event store must not be a symlink")
+    if not stat.S_ISREG(metadata.st_mode):
+        raise StoreIntegrityError("existing event store must be a regular file")
+    if metadata.st_size == 0 and not allow_empty:
+        raise StoreIntegrityError("existing event store must not be empty")
+    if metadata.st_nlink != 1:
+        raise StoreIntegrityError("existing event store must not be hard linked")
+    identity = _DatabasePathIdentity(
+        directory_identities=tuple(directory_identities),
+        leaf_identity=_DatabaseFileIdentity(device=metadata.st_dev, inode=metadata.st_ino),
+    )
+    if expected_identity is not None and identity != expected_identity:
+        raise StoreIntegrityError(
+            "existing event store path changed while it was being opened or used"
+        )
+    return identity
+
+
+def _create_database_exclusively(path: Path) -> _DatabaseFileIdentity | None:
+    flags = (
+        os.O_RDWR
+        | os.O_CREAT
+        | os.O_EXCL
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    try:
+        descriptor = os.open(path, flags, 0o600)
+    except FileExistsError:
+        return None
+    except OSError as error:
+        raise StoreIntegrityError("new event store could not be created safely") from error
+    try:
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+            raise StoreIntegrityError("new event store is not an exclusively owned regular file")
+        identity = _DatabaseFileIdentity(metadata.st_dev, metadata.st_ino)
+        _fsync_directory(path.parent)
+        return identity
+    except OSError as error:
+        raise StoreIntegrityError("new event store could not be inspected safely") from error
+    finally:
+        os.close(descriptor)
+
+
+def _fsync_directory(path: Path) -> None:
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_DIRECTORY", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        raise StoreIntegrityError(
+            "new event store parent directory could not be opened for synchronization"
+        ) from error
+    try:
+        os.fsync(descriptor)
+    except OSError as error:
+        raise StoreIntegrityError(
+            "new event store parent directory could not be synchronized"
+        ) from error
+    finally:
+        os.close(descriptor)
+
+
+def _preflight_missing_database_sidecars(path: Path) -> None:
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        sidecars = _inspect_existing_sidecars(path)
+        if sidecars.wal_identity is not None or sidecars.shm_identity is not None:
+            raise StoreIntegrityError(
+                "new event store path has pre-existing SQLite sidecars"
+            ) from None
+    except OSError as error:
+        raise StoreIntegrityError("event store path could not be inspected safely") from error
+
+
+def _validate_persisted_wal_header(
+    path: Path,
+    expected_identity: _DatabasePathIdentity,
+) -> None:
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        raise StoreIntegrityError(
+            "existing event store header could not be opened safely"
+        ) from error
+    try:
+        metadata = os.fstat(descriptor)
+        observed_identity = _DatabaseFileIdentity(metadata.st_dev, metadata.st_ino)
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_nlink != 1
+            or observed_identity != expected_identity.leaf_identity
+        ):
+            raise StoreIntegrityError("existing event store changed while reading its header")
+        header = os.read(descriptor, 100)
+    except OSError as error:
+        raise StoreIntegrityError("existing event store header could not be read safely") from error
+    finally:
+        os.close(descriptor)
+    if len(header) != 100 or header[:16] != b"SQLite format 3\x00":
+        raise StoreIntegrityError("existing event store has an invalid SQLite header")
+    if header[18:20] != b"\x02\x02":
+        raise StoreIntegrityError(
+            "existing event store journal_mode is not persistently configured for WAL"
+        )
+
+
+def _inspect_existing_sidecars(path: Path) -> _SidecarState:
+    wal = _optional_regular_file(Path(f"{path}-wal"), "WAL")
+    shm = _optional_regular_file(Path(f"{path}-shm"), "SHM")
+    rollback_journal = _optional_regular_file(Path(f"{path}-journal"), "rollback journal")
+    if rollback_journal is not None:
+        raise StoreIntegrityError("existing event store requires rollback-journal recovery")
+    if wal is None and shm is not None:
+        raise StoreIntegrityError("existing SHM sidecar has no matching WAL")
+    if wal is not None and (shm is None or shm[1] == 0):
+        raise StoreIntegrityError("existing WAL requires an existing usable SHM sidecar")
+    return _SidecarState(
+        wal_identity=None if wal is None else wal[0],
+        wal_size=None if wal is None else wal[1],
+        shm_identity=None if shm is None else shm[0],
+        shm_size=None if shm is None else shm[1],
+    )
+
+
+def _optional_regular_file(
+    path: Path,
+    label: str,
+) -> tuple[_DatabaseFileIdentity, int] | None:
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        return None
+    except OSError as error:
+        raise StoreIntegrityError(f"existing event store {label} could not be inspected") from error
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+        raise StoreIntegrityError(f"existing event store {label} must be a regular file")
+    if metadata.st_nlink != 1:
+        raise StoreIntegrityError(f"existing event store {label} must not be hard linked")
+    return _DatabaseFileIdentity(metadata.st_dev, metadata.st_ino), metadata.st_size
 
 
 def _transition_manifest(manifest: RunManifest, **changes: object) -> RunManifest:

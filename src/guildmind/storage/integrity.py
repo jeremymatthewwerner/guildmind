@@ -41,10 +41,9 @@ from guildmind.domain import (
     canonical_sha256,
 )
 from guildmind.storage.artifacts import ArtifactCorruptionError, FileArtifactStore
-from guildmind.storage.events import VerifiedRunRoot
+from guildmind.storage.events import VerifiedRunRoot, verified_run_roots_sha256
 
 _SCHEMA_VERSION: Literal["guildmind.artifact-audit/v1"] = "guildmind.artifact-audit/v1"
-_SNAPSHOT_SCHEMA_VERSION = "guildmind.verified-run-root-snapshot/v1"
 _TASK_MEDIA_TYPE = "application/vnd.guildmind.task+json"
 _EVALUATION_MEDIA_TYPE = "application/vnd.guildmind.evaluation+json"
 _DIGEST_NAME = re.compile(r"^[0-9a-f]{64}$")
@@ -71,6 +70,7 @@ class ArtifactFindingKind(StrEnum):
     CORRUPT_FINALIZED_ORPHAN = "corrupt_finalized_orphan"
     TEMP_ORPHAN = "temp_orphan"
     NONCANONICAL_ENTRY = "noncanonical_entry"
+    HARDLINK = "hardlink"
     SYMLINK = "symlink"
     SPECIAL_FILE = "special_file"
     SCAN_ERROR = "scan_error"
@@ -590,7 +590,6 @@ def _validate_roots(
     roots: Sequence[VerifiedRunRoot],
 ) -> tuple[tuple[VerifiedRunRoot, ...], str]:
     ordered = tuple(sorted(roots, key=lambda item: item.manifest.run_id))
-    identities: list[dict[str, str | int]] = []
     previous_run_id: str | None = None
     for root in ordered:
         run_id = root.manifest.run_id
@@ -626,22 +625,7 @@ def _validate_roots(
             field="head_event_sha256",
             run_id=run_id,
         )
-        identities.append(
-            {
-                "event_count": root.event_count,
-                "head_event_sha256": root.head_event_sha256,
-                "manifest_revision": root.manifest_revision,
-                "manifest_sha256": root.manifest_sha256,
-                "run_id": run_id,
-            }
-        )
-    snapshot_sha256 = canonical_sha256(
-        {
-            "roots": identities,
-            "schema_version": _SNAPSHOT_SCHEMA_VERSION,
-        }
-    )
-    return ordered, snapshot_sha256
+    return ordered, verified_run_roots_sha256(ordered)
 
 
 def _validate_root_integer(
@@ -930,6 +914,15 @@ def _read_reference(
                 kind=ArtifactFindingKind.SPECIAL_FILE,
                 detail="referenced_path_not_regular",
             )
+        if not requires_directory and metadata.st_nlink != 1:
+            return _BlobRead(
+                ok=False,
+                observed_sha256=None,
+                size_bytes=metadata.st_size,
+                data=None,
+                kind=ArtifactFindingKind.HARDLINK,
+                detail="referenced_path_hardlink",
+            )
 
     flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
     try:
@@ -963,6 +956,15 @@ def _read_reference(
                 data=None,
                 kind=ArtifactFindingKind.SPECIAL_FILE,
                 detail="referenced_descriptor_not_regular",
+            )
+        if metadata.st_nlink != 1:
+            return _BlobRead(
+                ok=False,
+                observed_sha256=None,
+                size_bytes=metadata.st_size,
+                data=None,
+                kind=ArtifactFindingKind.HARDLINK,
+                detail="referenced_path_hardlink",
             )
         if metadata.st_size != reference.size_bytes:
             return _BlobRead(
@@ -1173,6 +1175,16 @@ def _inventory_shard(
                 owners=owners,
             )
             continue
+        if stat.S_ISREG(metadata.st_mode) and metadata.st_nlink != 1:
+            findings.add(
+                ArtifactFindingKind.HARDLINK,
+                relative,
+                expected_sha256=entry.name if canonical else None,
+                size_bytes=metadata.st_size,
+                detail="referenced_path_hardlink" if owners else None,
+                owners=owners,
+            )
+            continue
         if entry.name.startswith(_TEMP_PREFIX):
             if stat.S_ISREG(metadata.st_mode):
                 findings.add(
@@ -1337,7 +1349,7 @@ def _hash_path_no_follow(path: Path, hash_budget: _HashBudget) -> _PathHash:
         return _PathHash(observed_sha256=None, errno=_errno(error))
     try:
         metadata = os.fstat(descriptor)
-        if not stat.S_ISREG(metadata.st_mode):
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
             return _PathHash(observed_sha256=None, errno=errno.EINVAL)
         if metadata.st_size > _MAX_ARTIFACT_BYTES or metadata.st_size > hash_budget.remaining:
             return _PathHash(observed_sha256=None, limit_exceeded=True)

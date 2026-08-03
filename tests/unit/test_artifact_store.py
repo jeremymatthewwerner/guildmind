@@ -218,6 +218,98 @@ def test_artifact_store_accepts_a_trusted_parent_alias(tmp_path: Path) -> None:
     assert store.get_bytes(reference) == b"trusted parent alias"
 
 
+def test_read_only_artifact_store_requires_existing_root_without_creating_it(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "state" / "artifacts"
+
+    with pytest.raises(ArtifactCorruptionError, match="could not be inspected"):
+        FileArtifactStore.open_existing_read_only(root, trusted_base=tmp_path)
+
+    assert not (tmp_path / "state").exists()
+    assert not root.exists()
+
+
+def test_read_only_artifact_store_reads_but_rejects_publication(
+    tmp_path: Path,
+) -> None:
+    writer = FileArtifactStore(tmp_path / "state" / "artifacts", trusted_base=tmp_path)
+    reference = writer.put_text("immutable evidence")
+    before = sorted(
+        (path.relative_to(tmp_path), path.stat().st_ino) for path in tmp_path.rglob("*")
+    )
+
+    reader = FileArtifactStore.open_existing_read_only(
+        writer.root,
+        trusted_base=tmp_path,
+    )
+
+    assert reader.get_bytes(reference) == b"immutable evidence"
+    reader.verify(reference)
+    assert reader.path_for(reference) == writer.path_for(reference)
+    with pytest.raises(ArtifactCorruptionError, match="cannot publish"):
+        reader.put_bytes(b"new bytes", media_type="application/octet-stream")
+    with pytest.raises(ArtifactCorruptionError, match="cannot publish"):
+        reader.put_text("new text")
+    after = sorted((path.relative_to(tmp_path), path.stat().st_ino) for path in tmp_path.rglob("*"))
+    assert after == before
+
+
+def test_read_only_artifact_store_rejects_root_symlink_without_following_it(
+    tmp_path: Path,
+) -> None:
+    state = tmp_path / "state"
+    state.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    sentinel = outside / "sentinel"
+    sentinel.write_bytes(b"unchanged")
+    root = state / "artifacts"
+    root.symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(ArtifactCorruptionError, match="not a real directory"):
+        FileArtifactStore.open_existing_read_only(root, trusted_base=tmp_path)
+
+    assert root.is_symlink()
+    assert sentinel.read_bytes() == b"unchanged"
+    assert sorted(path.name for path in outside.iterdir()) == ["sentinel"]
+
+
+def test_read_only_artifact_store_detects_replaced_captured_root(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "state" / "artifacts"
+    FileArtifactStore(root, trusted_base=tmp_path)
+    reader = FileArtifactStore.open_existing_read_only(root, trusted_base=tmp_path)
+    root.rename(tmp_path / "original-artifacts")
+    root.mkdir()
+
+    with pytest.raises(ArtifactCorruptionError, match="changed after store initialization"):
+        reader.verify_root_identity()
+    with pytest.raises(ArtifactCorruptionError, match="cannot publish"):
+        reader.put_bytes(b"blocked", media_type="application/octet-stream")
+
+    assert list(root.iterdir()) == []
+
+
+def test_artifact_store_rejects_a_hard_linked_canonical_blob(tmp_path: Path) -> None:
+    store = FileArtifactStore(tmp_path / "artifacts")
+    reference = store.put_text("immutable evidence")
+    canonical = store.path_for(reference)
+    outside_alias = tmp_path / "outside-alias"
+    os.link(canonical, outside_alias)
+
+    with pytest.raises(ArtifactCorruptionError, match="multiple hard links"):
+        store.verify(reference)
+    with pytest.raises(ArtifactCorruptionError, match="multiple hard links"):
+        store.get_bytes(reference)
+    with pytest.raises(ArtifactCorruptionError, match="multiple hard links"):
+        store.put_text("immutable evidence")
+
+    assert canonical.stat().st_nlink == 2
+    assert outside_alias.read_bytes() == b"immutable evidence"
+
+
 def test_artifact_store_requires_root_below_explicit_trusted_base(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="below its trusted base"):
         FileArtifactStore(tmp_path / "artifacts", trusted_base=tmp_path / "elsewhere")

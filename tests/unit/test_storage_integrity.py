@@ -26,6 +26,7 @@ from guildmind.storage import (
     VerifiedRunRoot,
     audit_artifact_store,
 )
+from guildmind.storage.events import verified_run_roots_sha256
 
 _START = datetime(2026, 8, 2, 12, 0, tzinfo=UTC)
 
@@ -274,21 +275,7 @@ def test_snapshot_identity_is_deterministic_order_independent_and_root_bound(
         store,
     )
 
-    expected = canonical_sha256(
-        {
-            "roots": [
-                {
-                    "event_count": root.event_count,
-                    "head_event_sha256": root.head_event_sha256,
-                    "manifest_revision": root.manifest_revision,
-                    "manifest_sha256": root.manifest_sha256,
-                    "run_id": root.manifest.run_id,
-                }
-                for root in (root_a, root_b)
-            ],
-            "schema_version": "guildmind.verified-run-root-snapshot/v1",
-        }
-    )
+    expected = verified_run_roots_sha256((root_a, root_b))
     assert forward.snapshot_sha256 == reverse.snapshot_sha256 == expected
     assert changed.snapshot_sha256 != forward.snapshot_sha256
 
@@ -468,6 +455,31 @@ def test_missing_or_corrupt_referenced_bytes_block_quarantine(
     finding = next(item for item in audit.findings if item.kind is expected)
     assert finding.owners == (ArtifactOwner(run_id="run-a", path=("patch",)),)
     assert audit.reachable[0].bytes_verified is False
+
+
+def test_hard_linked_referenced_blob_is_owned_and_blocks_quarantine(
+    tmp_path: Path,
+) -> None:
+    store = FileArtifactStore(tmp_path / "artifacts")
+    task, _ = _task_graph(store)
+    canonical = store.path_for(task)
+    outside_alias = tmp_path / "outside-alias"
+    os.link(canonical, outside_alias)
+
+    audit = audit_artifact_store(
+        _roots(_manifest("run-a", {"task_spec": task})),
+        store,
+    )
+
+    finding = next(item for item in audit.findings if item.kind is ArtifactFindingKind.HARDLINK)
+    assert finding.relative_path == task.storage_ref
+    assert finding.detail == "referenced_path_hardlink"
+    assert finding.owners == (ArtifactOwner(run_id="run-a", path=("task_spec",)),)
+    reachable = next(item for item in audit.reachable if item.sha256 == task.sha256)
+    assert not reachable.bytes_verified
+    assert audit.complete
+    assert not audit.quarantine_allowed
+    assert outside_alias.read_bytes() == canonical.read_bytes()
 
 
 def test_noncanonical_committed_storage_ref_is_reported_with_canonical_output(

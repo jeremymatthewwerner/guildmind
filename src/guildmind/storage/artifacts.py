@@ -8,6 +8,7 @@ import stat
 import tempfile
 from contextlib import suppress
 from pathlib import Path
+from typing import Self
 
 from guildmind.domain import ArtifactRef, sha256_bytes
 
@@ -43,10 +44,54 @@ class FileArtifactStore:
         if not relative_root.parts:
             raise ValueError("artifact store root must be below its trusted base")
         self.root = configured_base.resolve(strict=False).joinpath(relative_root)
+        self._read_only = False
         self._create_directory_chain(self.root)
         self._directory_identities = self._snapshot_directory_chain(self.root)
 
+    @classmethod
+    def open_existing_read_only(
+        cls,
+        root: Path,
+        *,
+        trusted_base: Path | None = None,
+    ) -> Self:
+        """Open an existing artifact tree without creating any directory.
+
+        The trusted base may itself be an operating-system path alias. Every path
+        component below its resolved identity, including the configured root, must
+        already be a real directory. The captured no-follow identities are checked
+        again before return and by every later public filesystem operation.
+        """
+
+        configured_root = Path(os.path.abspath(root))
+        if configured_root == Path(configured_root.anchor):
+            raise ValueError("artifact store root cannot be a filesystem root")
+        configured_base = Path(
+            os.path.abspath(trusted_base if trusted_base is not None else configured_root.parent)
+        )
+        try:
+            relative_root = configured_root.relative_to(configured_base)
+        except ValueError as error:
+            raise ValueError("artifact store root must be below its trusted base") from error
+        if not relative_root.parts:
+            raise ValueError("artifact store root must be below its trusted base")
+        try:
+            resolved_base = configured_base.resolve(strict=True)
+        except OSError as error:
+            raise ArtifactCorruptionError(
+                "existing artifact store trusted base is unavailable"
+            ) from error
+
+        instance = cls.__new__(cls)
+        instance.root = resolved_base.joinpath(relative_root)
+        instance._read_only = True
+        instance._directory_identities = instance._snapshot_directory_chain(instance.root)
+        instance._validate_directory_chain()
+        return instance
+
     def put_bytes(self, data: bytes, *, media_type: str) -> ArtifactRef:
+        if self._read_only:
+            raise ArtifactCorruptionError("read-only artifact store cannot publish artifacts")
         digest = sha256_bytes(data)
         relative_path = Path("sha256") / digest[:2] / digest
         reference = ArtifactRef(
@@ -89,6 +134,8 @@ class FileArtifactStore:
         self._validate_directory_chain()
 
     def _artifact_parent(self, digest: str, *, create: bool) -> Path:
+        if create and self._read_only:
+            raise ArtifactCorruptionError("read-only artifact store cannot create directories")
         expected = self.root / "sha256" / digest[:2]
         self._validate_directory_chain()
         current = self.root
@@ -210,6 +257,8 @@ class FileArtifactStore:
 
         if not stat.S_ISREG(path_metadata.st_mode):
             raise ArtifactCorruptionError(f"artifact {digest} is not a regular file")
+        if path_metadata.st_nlink != 1:
+            raise ArtifactCorruptionError(f"artifact {digest} has multiple hard links")
 
         open_flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
         try:
@@ -231,6 +280,7 @@ class FileArtifactStore:
                 or (opened_metadata.st_dev, opened_metadata.st_ino)
                 != (path_metadata.st_dev, path_metadata.st_ino)
                 or opened_metadata.st_size != size_bytes
+                or opened_metadata.st_nlink != 1
             ):
                 raise ArtifactCorruptionError(f"artifact {digest} failed verification")
 
@@ -253,6 +303,7 @@ class FileArtifactStore:
                 opened_metadata.st_size,
                 opened_metadata.st_mtime_ns,
                 opened_metadata.st_ctime_ns,
+                opened_metadata.st_nlink,
             )
             final_opened_snapshot = (
                 final_opened_metadata.st_dev,
@@ -260,6 +311,7 @@ class FileArtifactStore:
                 final_opened_metadata.st_size,
                 final_opened_metadata.st_mtime_ns,
                 final_opened_metadata.st_ctime_ns,
+                final_opened_metadata.st_nlink,
             )
             final_path_snapshot = (
                 final_path_metadata.st_dev,
@@ -267,9 +319,11 @@ class FileArtifactStore:
                 final_path_metadata.st_size,
                 final_path_metadata.st_mtime_ns,
                 final_path_metadata.st_ctime_ns,
+                final_path_metadata.st_nlink,
             )
             if (
                 not stat.S_ISREG(final_path_metadata.st_mode)
+                or final_path_metadata.st_nlink != 1
                 or opened_snapshot != final_opened_snapshot
                 or opened_snapshot != final_path_snapshot
             ):
