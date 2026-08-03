@@ -29,9 +29,12 @@ reconciled all nine fixtures as expected with zero infrastructure errors. Fixtur
 frozen schedule and native rootless x86_64 reference-host repetition. Fixtures 010–013
 now have committed directories and exact controls and pass their three-repeat
 trusted-local pristine/gold gate and their three-repeat two-phase development-container
-gate; their new cumulative campaign remains pending. Rows 014–020 remain a construction plan.
+gate. A separately committed cumulative campaign then reconciled all 13 fixtures as
+expected with zero infrastructure errors. Fixtures 001–013 are therefore
+development-qualified; they still require inclusion in the final frozen schedule and
+native rootless x86_64 reference-host repetition. Rows 014–020 remain a construction plan.
 Locally-qualified, development-qualified, or planned rows may not be counted in the final
-campaign denominator, and neither calibration may be relabeled as the final Stage 1
+campaign denominator, and none of these calibrations may be relabeled as the final Stage 1
 denominator.
 
 ## Anti-duplication and acceptance rules
@@ -70,10 +73,10 @@ A fixture is eligible only if all of the following hold:
 | 007 | `apportion(total, weights)` | Exact largest-remainder integer allocation and deterministic ties | integer + integer list | exact total, zero weights, index tie break, >53-bit values | Development-qualified; reference pending |
 | 008 | `topological_order(nodes, edges)` | Graph dependency resolution with stable ready-queue order | strings + edge pairs | disconnected graph, diamond, dynamic lexical tie, cycle result | Development-qualified; reference pending |
 | 009 | `apply_changes(document, changes)` | Ordered immutable-style nested state transformation | nested JSON + operations | root/nested set, delete/insert, order-sensitive list indexes | Development-qualified; reference pending |
-| 010 | `wrap_words(words, width)` | Greedy formatting with exact whitespace and overflow policy | string list + integer | exact-fit, oversized token, empty input, multiple lines | Development-container qualified; campaign/reference pending |
-| 011 | `business_days(start, end, holidays)` | Date parsing and inclusive/exclusive calendar boundary | ISO strings + list | weekend endpoints, leap day, holiday/weekend overlap | Development-container qualified; campaign/reference pending |
-| 012 | `parse_roman(text)` | Symbol parser with subtractive-pair validation | string | repeated symbols, legal subtraction, canonical rejection result | Development-container qualified; campaign/reference pending |
-| 013 | `rotate_grid(grid)` | Rectangular matrix index transformation | nested lists | non-square matrix, one row/column, empty grid | Development-container qualified; campaign/reference pending |
+| 010 | `wrap_words(words, width)` | Greedy formatting with exact whitespace and overflow policy | string list + integer | exact-fit, oversized token, empty input, multiple lines | Development-qualified; reference pending |
+| 011 | `business_days(start, end, holidays)` | Date parsing and inclusive/exclusive calendar boundary | ISO strings + list | weekend endpoints, leap day, holiday/weekend overlap | Development-qualified; reference pending |
+| 012 | `parse_roman(text)` | Symbol parser with subtractive-pair validation | string | repeated symbols, legal subtraction, canonical rejection result | Development-qualified; reference pending |
+| 013 | `rotate_grid(grid)` | Rectangular matrix index transformation | nested lists | non-square matrix, one row/column, empty grid | Development-qualified; reference pending |
 | 014 | `summarize_transactions(rows)` | Filtered, grouped, stable aggregation | list of objects | refunds, missing categories, zero amounts, first-seen order | Planned |
 | 015 | `match_route(pattern, path)` | Tokenized path matching and parameter extraction | strings → object/null | literal precedence, repeated separators, percent text policy | Planned |
 | 016 | `backoff_schedule(base, factor, cap, attempts)` | Bounded deterministic recurrence | numeric scalars | cap crossing, zero attempts, nonintegral factor, no overshoot | Planned |
@@ -220,9 +223,21 @@ containers. The self-bound
 records the exact source revision, image, patch, protocol, response, completion, and
 evaluation-binding identities. Its static verifier and opt-in live reproduction passed.
 
-The host remained rootful Docker Desktop on Apple Silicon, so the cumulative fixtures
-001–013 campaign and native rootless x86_64 reference-host repetition remain pending. No
-provider or hosted runtime was used.
+The separately committed
+[`stage1-local-batch-003-v1`](../campaigns/stage1-local-batch-003-v1.json) manifest froze
+fixtures 001–013 into one explicit round with seeds 3001–3013 and zero retries. It ran
+from its exact detached, tracked-clean revision before report documentation was added.
+All 13/13 declared attempts were terminal, reconciled, expected, replay-valid, and
+storage-clean; the aggregate report contained 182 events and zero infrastructure errors.
+A fresh reconciliation of the preserved raw state reproduced the report exactly. The
+[canonical Batch 003 campaign evidence](evidence/reliability-campaigns/2026-08-03-batch-003-local-calibration/README.md)
+is strict-schema and hash-bound and is reloaded by the repository test suite. This proves
+the local campaign harness across 13 semantic families. Thirteen observations are not
+the 100-attempt Stage 1 denominator and do not establish a population reliability rate.
+
+The development-container host remained rootful Docker Desktop on Apple Silicon, so
+native rootless x86_64 reference-host repetition remains pending. No provider or hosted
+runtime was used.
 
 ## Batch protocol
 
